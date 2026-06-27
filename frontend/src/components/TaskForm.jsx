@@ -1,5 +1,5 @@
 import { useRouter } from "expo-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
 	ActivityIndicator,
 	Alert,
@@ -11,7 +11,7 @@ import {
 	TouchableOpacity,
 	View,
 } from "react-native";
-import { TaskService } from "../../../src/services/task.service";
+import { TaskService } from "../services/task.service";
 
 const PRIORITIES = ["low", "medium", "high", "urgent"];
 const STATUSES = ["todo", "in_progress", "done", "archived"];
@@ -42,8 +42,14 @@ function Chip({ label, active, onPress }) {
 	);
 }
 
-export default function CreateTaskScreen() {
+export default function TaskForm({
+	mode = "create",
+	task = null,
+	onSaved,
+	onDeleted,
+}) {
 	const router = useRouter();
+	const isEditMode = mode === "edit";
 
 	const [title, setTitle] = useState("");
 	const [description, setDescription] = useState("");
@@ -59,10 +65,23 @@ export default function CreateTaskScreen() {
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState("");
 
-	const canSave = useMemo(
-		() => title.trim().length > 0 && !loading,
-		[title, loading],
-	);
+	useEffect(() => {
+		if (!task) return;
+
+		setTitle(task.title ?? "");
+		setDescription(task.description ?? "");
+		setStatus(task.status ?? "todo");
+		setPriority(task.priority ?? "medium");
+		setDueAt(task.due_at ? String(task.due_at) : "");
+		setReminderAt(task.reminder_at ? String(task.reminder_at) : "");
+		setRecurrenceRule(task.recurrence_rule ?? "");
+		setIsPinned(!!task.is_pinned);
+		setIsRecurring(!!task.is_recurring);
+	}, [task]);
+
+	const canSave = useMemo(() => {
+		return title.trim().length > 0 && !loading;
+	}, [title, loading]);
 
 	const handleSave = async () => {
 		setError("");
@@ -85,7 +104,7 @@ export default function CreateTaskScreen() {
 		try {
 			setLoading(true);
 
-			const result = await TaskService.create({
+			const payload = {
 				title: title.trim(),
 				description: description.trim(),
 				status,
@@ -99,14 +118,29 @@ export default function CreateTaskScreen() {
 					source: "mobile",
 				},
 				client_timestamp: new Date().toISOString(),
-			});
+			};
+
+			const result = isEditMode
+				? await TaskService.update(task.id, payload)
+				: await TaskService.create(payload);
 
 			if (!result.success) {
-				setError(result.message || "Failed to create task.");
+				setError(result.message || "Failed to save task.");
 				return;
 			}
 
-			Alert.alert("Success", "Task created successfully.");
+			Alert.alert(
+				"Success",
+				isEditMode
+					? "Task updated successfully."
+					: "Task created successfully.",
+			);
+
+			if (typeof onSaved === "function") {
+				onSaved(result.data);
+				return;
+			}
+
 			router.back();
 		} catch (err) {
 			setError(err?.message || "Something went wrong.");
@@ -115,14 +149,60 @@ export default function CreateTaskScreen() {
 		}
 	};
 
+	const handleDelete = () => {
+		if (!isEditMode || !task?.id) return;
+
+		Alert.alert(
+			"Delete task",
+			"Are you sure you want to delete this task? This action cannot be undone.",
+			[
+				{ text: "Cancel", style: "cancel" },
+				{
+					text: "Delete",
+					style: "destructive",
+					onPress: async () => {
+						try {
+							setLoading(true);
+							setError("");
+
+							const result = await TaskService.remove(task.id);
+
+							if (!result.success) {
+								setError(result.message || "Failed to delete task.");
+								return;
+							}
+
+							Alert.alert("Success", "Task deleted successfully.");
+
+							if (typeof onDeleted === "function") {
+								onDeleted();
+								return;
+							}
+
+							router.back();
+						} catch (err) {
+							setError(err?.message || "Something went wrong.");
+						} finally {
+							setLoading(false);
+						}
+					},
+				},
+			],
+		);
+	};
+
 	return (
 		<ScrollView
 			contentContainerStyle={styles.container}
 			keyboardShouldPersistTaps="handled"
 		>
-			<Text style={styles.title}>Create Task</Text>
+			<Text style={styles.title}>
+				{isEditMode ? "Edit Task" : "Create Task"}
+			</Text>
 			<Text style={styles.subtitle}>
-				Add a new task and save it to your account.
+				{isEditMode
+					? "Update the task details below."
+					: "Add a new task and save it to your account."}
 			</Text>
 
 			{error ? <Text style={styles.error}>{error}</Text> : null}
@@ -216,7 +296,9 @@ export default function CreateTaskScreen() {
 				{loading ? (
 					<ActivityIndicator color="#fff" />
 				) : (
-					<Text style={styles.buttonText}>Save Task</Text>
+					<Text style={styles.buttonText}>
+						{isEditMode ? "Update Task" : "Save Task"}
+					</Text>
 				)}
 			</TouchableOpacity>
 
@@ -227,6 +309,17 @@ export default function CreateTaskScreen() {
 			>
 				<Text style={styles.secondaryButtonText}>Cancel</Text>
 			</TouchableOpacity>
+
+			{isEditMode && task?.id ? (
+				<TouchableOpacity
+					style={styles.deleteButton}
+					onPress={handleDelete}
+					disabled={loading}
+					activeOpacity={0.85}
+				>
+					<Text style={styles.deleteButtonText}>Delete Task</Text>
+				</TouchableOpacity>
+			) : null}
 		</ScrollView>
 	);
 }
@@ -333,6 +426,20 @@ const styles = StyleSheet.create({
 	},
 	secondaryButtonText: {
 		color: "#111",
+		fontWeight: "700",
+		fontSize: 15,
+	},
+	deleteButton: {
+		marginTop: 24,
+		paddingVertical: 14,
+		borderRadius: 12,
+		alignItems: "center",
+		backgroundColor: "#fff5f5",
+		borderWidth: 1,
+		borderColor: "#f5c2c7",
+	},
+	deleteButtonText: {
+		color: "#b00020",
 		fontWeight: "700",
 		fontSize: 15,
 	},

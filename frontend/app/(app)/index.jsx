@@ -2,6 +2,7 @@ import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import {
 	ActivityIndicator,
+	Alert,
 	FlatList,
 	RefreshControl,
 	StyleSheet,
@@ -9,6 +10,7 @@ import {
 	TouchableOpacity,
 	View,
 } from "react-native";
+import TaskCard from "../../src/components/TaskCard";
 import { TaskService } from "../../src/services/task.service";
 
 export default function HomeScreen() {
@@ -56,27 +58,41 @@ export default function HomeScreen() {
 		setRefreshing(false);
 	};
 
-	const renderTask = ({ item }) => (
-		<View style={styles.taskCard}>
-			<View style={styles.taskRow}>
-				<Text style={styles.taskTitle}>{item.title}</Text>
-				<Text style={styles.taskStatus}>{item.status}</Text>
-			</View>
+	const handleToggleComplete = async (task) => {
+		const nextStatus = task.status === "done" ? "todo" : "done";
 
-			{item.description ? (
-				<Text style={styles.taskDescription}>{item.description}</Text>
-			) : null}
+		const result = await TaskService.update(task.id, {
+			status: nextStatus,
+			completed_at: nextStatus === "done" ? new Date().toISOString() : null,
+		});
 
-			<View style={styles.metaRow}>
-				<Text style={styles.metaText}>Priority: {item.priority}</Text>
-				{item.due_at ? (
-					<Text style={styles.metaText}>
-						Due: {new Date(item.due_at).toLocaleDateString()}
-					</Text>
-				) : null}
-			</View>
-		</View>
-	);
+		if (!result.success) {
+			Alert.alert("Error", result.message);
+			return;
+		}
+
+		await loadTasks();
+	};
+
+	const handleDelete = async (task) => {
+		Alert.alert("Delete task", "Are you sure you want to delete this task?", [
+			{ text: "Cancel", style: "cancel" },
+			{
+				text: "Delete",
+				style: "destructive",
+				onPress: async () => {
+					const result = await TaskService.remove(task.id);
+
+					if (!result.success) {
+						Alert.alert("Error", result.message);
+						return;
+					}
+
+					await loadTasks();
+				},
+			},
+		]);
+	};
 
 	if (loading) {
 		return (
@@ -110,7 +126,14 @@ export default function HomeScreen() {
 			<FlatList
 				data={tasks}
 				keyExtractor={(item) => item.id}
-				renderItem={renderTask}
+				renderItem={({ item }) => (
+					<TaskCard
+						task={item}
+						onPress={() => router.push(`/(app)/tasks/${item.id}`)}
+						onToggleComplete={() => handleToggleComplete(item)}
+						onDelete={() => handleDelete(item)}
+					/>
+				)}
 				contentContainerStyle={
 					tasks.length === 0 ? styles.emptyContainer : styles.listContent
 				}
@@ -185,44 +208,6 @@ const styles = StyleSheet.create({
 	},
 	emptyContainer: {
 		flexGrow: 1,
-	},
-	taskCard: {
-		borderWidth: 1,
-		borderColor: "#e5e5e5",
-		borderRadius: 14,
-		padding: 14,
-		marginBottom: 12,
-		backgroundColor: "#fafafa",
-	},
-	taskRow: {
-		flexDirection: "row",
-		alignItems: "center",
-		justifyContent: "space-between",
-		marginBottom: 6,
-	},
-	taskTitle: {
-		fontSize: 18,
-		fontWeight: "600",
-		color: "#111",
-		flex: 1,
-		paddingRight: 12,
-	},
-	taskStatus: {
-		fontSize: 12,
-		color: "#555",
-		textTransform: "uppercase",
-	},
-	taskDescription: {
-		color: "#444",
-		marginBottom: 10,
-	},
-	metaRow: {
-		flexDirection: "row",
-		justifyContent: "space-between",
-	},
-	metaText: {
-		fontSize: 12,
-		color: "#666",
 	},
 	emptyState: {
 		flex: 1,
