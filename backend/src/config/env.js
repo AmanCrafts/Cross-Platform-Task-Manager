@@ -12,7 +12,7 @@ function requireEnv(name) {
 	return value;
 }
 
-export const PORT = process.env.PORT || 5000;
+export const PORT = process.env.PORT || 3000;
 
 export const SUPABASE_URL = requireEnv("SUPABASE_URL");
 export const SUPABASE_PUBLISHABLE_KEY = requireEnv("SUPABASE_PUBLISHABLE_KEY");
