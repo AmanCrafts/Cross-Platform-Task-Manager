@@ -1,30 +1,75 @@
 import { supabase } from "../lib/supabase";
 
 export const AuthService = {
-	signUp(email, password) {
-		return supabase.auth.signUp({
+	async signUp(email, password) {
+		const { data, error } = await supabase.auth.signUp({
 			email,
 			password,
 		});
+
+		if (error) {
+			return {
+				success: false,
+				message: error.message || "Something went wrong. Please try again.",
+				code: error.code || "unknown_error",
+			};
+		}
+		return {
+			success: true,
+			data,
+		};
 	},
 
-	signIn(email, password) {
-		return supabase.auth.signIn({
+	async signIn(email, password) {
+		const { data, error } = await supabase.auth.signIn({
 			email,
 			password,
 		});
+
+		if (error) {
+			return {
+				success: false,
+				message: error.message || "Something went wrong. Please try again.",
+				code: error.code || "unknown_error",
+			};
+		}
+		return {
+			success: true,
+			data,
+		};
 	},
 
-	signOut() {
-		return supabase.auth.signOut();
+	async signOut() {
+		const { error } = await supabase.auth.signOut();
+		if (error) {
+			return {
+				success: false,
+				message: error.message || "Something went wrong. Please try again.",
+				code: error.code || "unknown_error",
+			};
+		}
+		return {
+			success: true,
+		};
 	},
 
-	getSession() {
-		return supabase.auth.getSession();
+	async getSession() {
+		return await supabase.auth.getSession();
 	},
 
-	getUser() {
-		return supabase.auth.getUser();
+	async getUser() {
+		const { data, error } = await supabase.auth.getUser();
+		if (error) {
+			return {
+				success: false,
+				message: error.message || "Something went wrong. Please try again.",
+				code: error.code || "unknown_error",
+			};
+		}
+		return {
+			success: true,
+			data,
+		};
 	},
 
 	onAuthStateChange(callback) {
