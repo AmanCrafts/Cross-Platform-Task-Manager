@@ -8,15 +8,18 @@ import {
 	View,
 } from "react-native";
 
+import { AuthService } from "../../src/services/auth.service";
+
 export default function LoginScreen() {
 	const [email, setEmail] = useState("");
 	const [password, setPassword] = useState("");
 
-	const handleLogin = () => {
+	const handleLogin = async () => {
 		console.log({
 			email,
 			password,
 		});
+		await AuthService.signIn(email, password);
 	};
 
 	return (
