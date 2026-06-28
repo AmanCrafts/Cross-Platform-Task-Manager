@@ -10,8 +10,9 @@ import {
 	TouchableOpacity,
 	View,
 } from "react-native";
-import TaskCard from "../../src/components/TaskCard";
-import { TaskService } from "../../src/services/task.service";
+import Screen from "../../../src/components/Screen";
+import TaskCard from "../../../src/components/TaskCard";
+import { TaskService } from "../../../src/services/task.service";
 
 export default function HomeScreen() {
 	const router = useRouter();
@@ -27,7 +28,7 @@ export default function HomeScreen() {
 		const result = await TaskService.getAll();
 
 		if (!result.success) {
-			setError(result.message);
+			setError(result.message || "Failed to load tasks.");
 			setTasks([]);
 			return;
 		}
@@ -67,31 +68,11 @@ export default function HomeScreen() {
 		});
 
 		if (!result.success) {
-			Alert.alert("Error", result.message);
+			Alert.alert("Error", result.message || "Failed to update task.");
 			return;
 		}
 
 		await loadTasks();
-	};
-
-	const handleDelete = async (task) => {
-		Alert.alert("Delete task", "Are you sure you want to delete this task?", [
-			{ text: "Cancel", style: "cancel" },
-			{
-				text: "Delete",
-				style: "destructive",
-				onPress: async () => {
-					const result = await TaskService.remove(task.id);
-
-					if (!result.success) {
-						Alert.alert("Error", result.message);
-						return;
-					}
-
-					await loadTasks();
-				},
-			},
-		]);
 	};
 
 	if (loading) {
@@ -104,51 +85,52 @@ export default function HomeScreen() {
 	}
 
 	return (
-		<View style={styles.container}>
-			<View style={styles.header}>
-				<View>
-					<Text style={styles.title}>Tasks</Text>
-					<Text style={styles.subtitle}>
-						{tasks.length} task{tasks.length === 1 ? "" : "s"}
-					</Text>
-				</View>
-			</View>
-
-			{error ? <Text style={styles.error}>{error}</Text> : null}
-
-			<FlatList
-				data={tasks}
-				keyExtractor={(item) => item.id}
-				renderItem={({ item }) => (
-					<TaskCard
-						task={item}
-						onPress={() => router.push(`/(app)/tasks/${item.id}`)}
-						onToggleComplete={() => handleToggleComplete(item)}
-						onDelete={() => handleDelete(item)}
-					/>
-				)}
-				contentContainerStyle={
-					tasks.length === 0 ? styles.emptyContainer : styles.listContent
-				}
-				refreshControl={
-					<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
-				}
-				ListEmptyComponent={
-					<View style={styles.emptyState}>
-						<Text style={styles.emptyTitle}>No tasks yet</Text>
-						<Text style={styles.emptyText}>
-							Create your first task to get started.
+		<Screen>
+			<View style={styles.container}>
+				<View style={styles.header}>
+					<View>
+						<Text style={styles.title}>Tasks</Text>
+						<Text style={styles.subtitle}>
+							{tasks.length} task{tasks.length === 1 ? "" : "s"}
 						</Text>
-						<TouchableOpacity
-							style={styles.emptyButton}
-							onPress={() => router.push("/(app)/tasks/create")}
-						>
-							<Text style={styles.emptyButtonText}>Create Task</Text>
-						</TouchableOpacity>
 					</View>
-				}
-			/>
-		</View>
+				</View>
+
+				{error ? <Text style={styles.error}>{error}</Text> : null}
+
+				<FlatList
+					data={tasks}
+					keyExtractor={(item) => item.id}
+					renderItem={({ item }) => (
+						<TaskCard
+							task={item}
+							onPress={() => router.push(`/(app)/tasks/${item.id}`)}
+							onToggleComplete={() => handleToggleComplete(item)}
+						/>
+					)}
+					contentContainerStyle={
+						tasks.length === 0 ? styles.emptyContainer : styles.listContent
+					}
+					refreshControl={
+						<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
+					}
+					ListEmptyComponent={
+						<View style={styles.emptyState}>
+							<Text style={styles.emptyTitle}>No tasks yet</Text>
+							<Text style={styles.emptyText}>
+								Create your first task to get started.
+							</Text>
+							<TouchableOpacity
+								style={styles.emptyButton}
+								onPress={() => router.push("/(app)/(tabs)/create")}
+							>
+								<Text style={styles.emptyButtonText}>Create Task</Text>
+							</TouchableOpacity>
+						</View>
+					}
+				/>
+			</View>
+		</Screen>
 	);
 }
 

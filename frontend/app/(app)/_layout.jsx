@@ -10,8 +10,8 @@ export default function AppLayout() {
 			<View
 				style={{
 					flex: 1,
-					justifyContent: "center",
 					alignItems: "center",
+					justifyContent: "center",
 				}}
 			>
 				<ActivityIndicator />
@@ -24,10 +24,9 @@ export default function AppLayout() {
 	}
 
 	return (
-		<Stack
-			screenOptions={{
-				headerShown: false,
-			}}
-		/>
+		<Stack screenOptions={{ headerShown: false }}>
+			<Stack.Screen name="(tabs)" />
+			<Stack.Screen name="tasks/[id]" />
+		</Stack>
 	);
 }

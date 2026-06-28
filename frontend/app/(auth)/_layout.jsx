@@ -3,18 +3,22 @@ import { ActivityIndicator, View } from "react-native";
 import { useAuth } from "../../src/hooks/useAuth";
 
 export default function AuthLayout() {
-	const { session, loading } = useAuth();
+	const { session, loading, needsOnboarding } = useAuth();
 
 	if (loading) {
 		return (
-			<View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+			<View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
 				<ActivityIndicator />
 			</View>
 		);
 	}
 
 	if (session) {
-		return <Redirect href="/(app)" />;
+		if (needsOnboarding) {
+			return <Redirect href="/(app)/(tabs)/profile" />;
+		}
+
+		return <Redirect href="/(app)/(tabs)" />;
 	}
 
 	return <Stack screenOptions={{ headerShown: false }} />;

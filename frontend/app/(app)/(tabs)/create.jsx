@@ -1,11 +1,14 @@
+import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
+	ActivityIndicator,
 	Alert,
 	ScrollView,
 	StyleSheet,
 	Text,
 	TouchableOpacity,
 } from "react-native";
+import Screen from "../../../src/components/Screen";
 import TaskForm from "../../../src/components/TaskForm";
 import { TaskService } from "../../../src/services/task.service";
 
@@ -34,6 +37,8 @@ function toIsoOrUndefined(value) {
 }
 
 export default function CreateTaskScreen() {
+	const router = useRouter();
+
 	const [form, setForm] = useState(INITIAL_FORM);
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState("");
@@ -82,6 +87,7 @@ export default function CreateTaskScreen() {
 
 			Alert.alert("Success", "Task created successfully.");
 			setForm(INITIAL_FORM);
+			router.replace("/(app)/(tabs)");
 		} catch (err) {
 			setError(err?.message || "Something went wrong.");
 		} finally {
@@ -90,25 +96,29 @@ export default function CreateTaskScreen() {
 	};
 
 	return (
-		<ScrollView
-			contentContainerStyle={styles.container}
-			keyboardShouldPersistTaps="handled"
-		>
-			{error ? <Text style={styles.error}>{error}</Text> : null}
-
-			<TaskForm form={form} setForm={setForm} mode="create" />
-
-			<TouchableOpacity
-				style={[styles.button, loading && styles.buttonDisabled]}
-				onPress={handleSave}
-				disabled={loading}
-				activeOpacity={0.85}
+		<Screen>
+			<ScrollView
+				contentContainerStyle={styles.container}
+				keyboardShouldPersistTaps="handled"
 			>
-				<Text style={styles.buttonText}>
-					{loading ? "Saving..." : "Save Task"}
-				</Text>
-			</TouchableOpacity>
-		</ScrollView>
+				{error ? <Text style={styles.error}>{error}</Text> : null}
+
+				<TaskForm form={form} setForm={setForm} mode="create" />
+
+				<TouchableOpacity
+					style={[styles.button, loading && styles.buttonDisabled]}
+					onPress={handleSave}
+					disabled={loading}
+					activeOpacity={0.85}
+				>
+					{loading ? (
+						<ActivityIndicator color="#fff" />
+					) : (
+						<Text style={styles.buttonText}>Save Task</Text>
+					)}
+				</TouchableOpacity>
+			</ScrollView>
+		</Screen>
 	);
 }
 

@@ -9,10 +9,11 @@ import {
 	TouchableOpacity,
 	View,
 } from "react-native";
+import Screen from "../../../src/components/Screen";
 import TaskForm from "../../../src/components/TaskForm";
 import { TaskService } from "../../../src/services/task.service";
 
-const INITIAL_FORM = {
+const EMPTY_FORM = {
 	title: "",
 	description: "",
 	status: "todo",
@@ -50,7 +51,7 @@ function toIsoOrUndefined(value) {
 	return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
 }
 
-function buildUpdatePayload(form) {
+function buildPayload(form) {
 	return {
 		title: form.title.trim(),
 		description: form.description.trim(),
@@ -75,7 +76,7 @@ export default function TaskDetailsScreen() {
 	}, [params.id]);
 
 	const [task, setTask] = useState(null);
-	const [form, setForm] = useState(INITIAL_FORM);
+	const [form, setForm] = useState(EMPTY_FORM);
 	const [loading, setLoading] = useState(true);
 	const [saving, setSaving] = useState(false);
 	const [deleting, setDeleting] = useState(false);
@@ -91,8 +92,8 @@ export default function TaskDetailsScreen() {
 			return;
 		}
 
-		setError("");
 		setLoading(true);
+		setError("");
 
 		const result = await TaskService.getById(taskId);
 
@@ -103,9 +104,8 @@ export default function TaskDetailsScreen() {
 			return;
 		}
 
-		const loadedTask = result.data;
-		setTask(loadedTask);
-		setForm(toForm(loadedTask));
+		setTask(result.data);
+		setForm(toForm(result.data));
 		setLoading(false);
 	}, [taskId]);
 
@@ -134,7 +134,7 @@ export default function TaskDetailsScreen() {
 		try {
 			setSaving(true);
 
-			const result = await TaskService.update(taskId, buildUpdatePayload(form));
+			const result = await TaskService.update(taskId, buildPayload(form));
 
 			if (!result.success) {
 				setError(result.message || "Failed to update task.");
@@ -156,7 +156,7 @@ export default function TaskDetailsScreen() {
 	const handleDelete = () => {
 		Alert.alert(
 			"Delete task",
-			"This task will be moved to deleted state. You can restore it later.",
+			"This task will be soft deleted. You can restore it later.",
 			[
 				{ text: "Cancel", style: "cancel" },
 				{
@@ -174,7 +174,6 @@ export default function TaskDetailsScreen() {
 
 							setTask(result.data);
 							setForm(toForm(result.data));
-
 							Alert.alert("Deleted", "Task deleted successfully.");
 						} catch (err) {
 							setError(err?.message || "Something went wrong.");
@@ -199,7 +198,6 @@ export default function TaskDetailsScreen() {
 
 			setTask(result.data);
 			setForm(toForm(result.data));
-
 			Alert.alert("Restored", "Task restored successfully.");
 		} catch (err) {
 			setError(err?.message || "Something went wrong.");
@@ -235,85 +233,84 @@ export default function TaskDetailsScreen() {
 	const formDisabled = isDeleted || saving || deleting || restoring;
 
 	return (
-		<ScrollView
-			contentContainerStyle={styles.container}
-			keyboardShouldPersistTaps="handled"
-		>
-			<View style={styles.header}>
-				<Text style={styles.pageTitle}>Task Details</Text>
-				<Text style={styles.pageSubtitle}>
-					{isDeleted ? "Deleted task" : "Active task"}
-				</Text>
-			</View>
-
-			{error ? <Text style={styles.errorText}>{error}</Text> : null}
-
-			{isDeleted ? (
-				<View style={styles.deletedBanner}>
-					<Text style={styles.deletedBannerText}>
-						This task is deleted and currently read-only.
+		<Screen>
+			<ScrollView
+				contentContainerStyle={styles.container}
+				keyboardShouldPersistTaps="handled"
+			>
+				<View style={styles.header}>
+					<Text style={styles.pageTitle}>Task Details</Text>
+					<Text style={styles.pageSubtitle}>
+						{isDeleted ? "Deleted task" : "Active task"}
 					</Text>
 				</View>
-			) : null}
 
-			<TaskForm
-				mode="edit"
-				form={form}
-				setForm={setForm}
-				disabled={formDisabled}
-			/>
+				{error ? <Text style={styles.errorText}>{error}</Text> : null}
 
-			{!isDeleted ? (
-				<>
+				{isDeleted ? (
+					<View style={styles.deletedBanner}>
+						<Text style={styles.deletedBannerText}>
+							This task is deleted and currently read-only.
+						</Text>
+					</View>
+				) : null}
+
+				<TaskForm
+					mode="edit"
+					form={form}
+					setForm={setForm}
+					disabled={formDisabled}
+				/>
+
+				{!isDeleted ? (
+					<>
+						<TouchableOpacity
+							style={[styles.primaryButton, saving && styles.buttonDisabled]}
+							onPress={handleSave}
+							disabled={saving || deleting || restoring}
+						>
+							{saving ? (
+								<ActivityIndicator color="#fff" />
+							) : (
+								<Text style={styles.primaryButtonText}>Save Changes</Text>
+							)}
+						</TouchableOpacity>
+
+						<TouchableOpacity
+							style={[styles.deleteButton, deleting && styles.buttonDisabled]}
+							onPress={handleDelete}
+							disabled={saving || deleting || restoring}
+						>
+							{deleting ? (
+								<ActivityIndicator color="#b00020" />
+							) : (
+								<Text style={styles.deleteButtonText}>Delete Task</Text>
+							)}
+						</TouchableOpacity>
+					</>
+				) : (
 					<TouchableOpacity
-						style={[styles.primaryButton, saving && styles.buttonDisabled]}
-						onPress={handleSave}
+						style={[styles.restoreButton, restoring && styles.buttonDisabled]}
+						onPress={handleRestore}
 						disabled={saving || deleting || restoring}
-						activeOpacity={0.85}
 					>
-						{saving ? (
+						{restoring ? (
 							<ActivityIndicator color="#fff" />
 						) : (
-							<Text style={styles.primaryButtonText}>Save Changes</Text>
+							<Text style={styles.restoreButtonText}>Restore Task</Text>
 						)}
 					</TouchableOpacity>
+				)}
 
-					<TouchableOpacity
-						style={[styles.deleteButton, deleting && styles.buttonDisabled]}
-						onPress={handleDelete}
-						disabled={saving || deleting || restoring}
-						activeOpacity={0.85}
-					>
-						{deleting ? (
-							<ActivityIndicator color="#b00020" />
-						) : (
-							<Text style={styles.deleteButtonText}>Delete Task</Text>
-						)}
-					</TouchableOpacity>
-				</>
-			) : (
 				<TouchableOpacity
-					style={[styles.restoreButton, restoring && styles.buttonDisabled]}
-					onPress={handleRestore}
+					style={styles.secondaryButton}
+					onPress={() => router.back()}
 					disabled={saving || deleting || restoring}
-					activeOpacity={0.85}
 				>
-					{restoring ? (
-						<ActivityIndicator color="#fff" />
-					) : (
-						<Text style={styles.restoreButtonText}>Restore Task</Text>
-					)}
+					<Text style={styles.secondaryButtonText}>Back</Text>
 				</TouchableOpacity>
-			)}
-
-			<TouchableOpacity
-				style={styles.secondaryButton}
-				onPress={() => router.back()}
-				disabled={saving || deleting || restoring}
-			>
-				<Text style={styles.secondaryButtonText}>Back</Text>
-			</TouchableOpacity>
-		</ScrollView>
+			</ScrollView>
+		</Screen>
 	);
 }
 
