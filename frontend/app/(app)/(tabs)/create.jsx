@@ -1,16 +1,29 @@
+// Create task — AppHeader with back arrow + trailing Save TextButton.
+// KeyboardAvoidingView with scroll, TaskForm in create mode, full-width
+// PrimaryButton at the bottom for the primary action. Preserves the
+// existing metadata payload (source: "mobile") and client_timestamp.
+
+import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
-	ActivityIndicator,
-	Alert,
-	ScrollView,
+	KeyboardAvoidingView,
+	Platform,
+	Pressable,
 	StyleSheet,
 	Text,
-	TouchableOpacity,
+	View,
 } from "react-native";
-import Screen from "../../../src/components/Screen";
 import TaskForm from "../../../src/components/TaskForm";
+import AppHeader from "../../../src/components/ui/AppHeader";
+import KeyboardAvoidingWrap from "../../../src/components/ui/KeyboardAvoidingWrap";
+import PrimaryButton from "../../../src/components/ui/PrimaryButton";
+import { isRecurrenceSet } from "../../../src/components/ui/recurrence.options";
+import ScreenContainer from "../../../src/components/ui/ScreenContainer";
+import TextButton from "../../../src/components/ui/TextButton";
+import { useToast } from "../../../src/hooks/useToast";
 import { TaskService } from "../../../src/services/task.service";
+import { colors, spacing, typography } from "../../../src/theme";
 
 const INITIAL_FORM = {
 	title: "",
@@ -21,7 +34,6 @@ const INITIAL_FORM = {
 	reminder_at: "",
 	recurrence_rule: "",
 	is_pinned: false,
-	is_recurring: false,
 };
 
 function isValidDate(value) {
@@ -38,10 +50,13 @@ function toIsoOrUndefined(value) {
 
 export default function CreateTaskScreen() {
 	const router = useRouter();
+	const { show } = useToast();
 
 	const [form, setForm] = useState(INITIAL_FORM);
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState("");
+
+	const canSave = form.title.trim().length > 0 && !loading;
 
 	const handleSave = async () => {
 		setError("");
@@ -61,91 +76,133 @@ export default function CreateTaskScreen() {
 			return;
 		}
 
-		try {
-			setLoading(true);
+		setLoading(true);
+		const result = await TaskService.create({
+			title: form.title.trim(),
+			description: form.description?.trim() || null,
+			status: form.status,
+			priority: form.priority,
+			due_at: toIsoOrUndefined(form.due_at) ?? null,
+			reminder_at: toIsoOrUndefined(form.reminder_at) ?? null,
+			is_pinned: form.is_pinned,
+			is_recurring: isRecurrenceSet(form.recurrence_rule),
+			recurrence_rule: form.recurrence_rule?.trim() || null,
+			metadata: {
+				source: "mobile",
+			},
+			client_timestamp: new Date().toISOString(),
+		});
+		setLoading(false);
 
-			const result = await TaskService.create({
-				title: form.title.trim(),
-				description: form.description.trim(),
-				status: form.status,
-				priority: form.priority,
-				due_at: toIsoOrUndefined(form.due_at),
-				reminder_at: toIsoOrUndefined(form.reminder_at),
-				is_pinned: form.is_pinned,
-				is_recurring: form.is_recurring,
-				recurrence_rule: form.recurrence_rule.trim() || undefined,
-				metadata: {
-					source: "mobile",
-				},
-				client_timestamp: new Date().toISOString(),
-			});
-
-			if (!result.success) {
-				setError(result.message || "Failed to create task.");
-				return;
-			}
-
-			Alert.alert("Success", "Task created successfully.");
-			setForm(INITIAL_FORM);
-			router.replace("/(app)/(tabs)");
-		} catch (err) {
-			setError(err?.message || "Something went wrong.");
-		} finally {
-			setLoading(false);
+		if (!result.success) {
+			setError(result.message || "Failed to create task.");
+			return;
 		}
+
+		show({ message: "Task created", tone: "success" });
+		router.back();
 	};
 
 	return (
-		<Screen>
-			<ScrollView
-				contentContainerStyle={styles.container}
-				keyboardShouldPersistTaps="handled"
+		<ScreenContainer padded={false} background="background">
+			<View style={styles.headerWrap}>
+				<AppHeader
+					title="New task"
+					leading={
+						<Pressable
+							onPress={() => router.back()}
+							accessibilityRole="button"
+							accessibilityLabel="Cancel"
+							hitSlop={8}
+							style={({ pressed }) => [
+								styles.backButton,
+								pressed ? styles.backPressed : null,
+							]}
+						>
+							<Ionicons
+								name="chevron-back"
+								size={22}
+								color={colors.text.primary}
+							/>
+						</Pressable>
+					}
+					trailing={
+						<TextButton
+							label={loading ? "Saving..." : "Save"}
+							tone="brand"
+							disabled={!canSave}
+							onPress={handleSave}
+						/>
+					}
+				/>
+			</View>
+
+			<KeyboardAvoidingView
+				behavior={Platform.OS === "ios" ? "padding" : "height"}
+				style={styles.flex}
+				keyboardVerticalOffset={Platform.OS === "ios" ? spacing.lg : 0}
 			>
-				{error ? <Text style={styles.error}>{error}</Text> : null}
+				<KeyboardAvoidingWrap scroll contentContainerStyle={styles.content}>
+					<TaskForm form={form} setForm={setForm} />
 
-				<TaskForm form={form} setForm={setForm} mode="create" />
+					{error ? (
+						<View style={styles.errorBanner}>
+							<Ionicons
+								name="alert-circle-outline"
+								size={18}
+								color={colors.semantic.danger}
+							/>
+							<Text style={styles.errorText}>{error}</Text>
+						</View>
+					) : null}
 
-				<TouchableOpacity
-					style={[styles.button, loading && styles.buttonDisabled]}
-					onPress={handleSave}
-					disabled={loading}
-					activeOpacity={0.85}
-				>
-					{loading ? (
-						<ActivityIndicator color="#fff" />
-					) : (
-						<Text style={styles.buttonText}>Save Task</Text>
-					)}
-				</TouchableOpacity>
-			</ScrollView>
-		</Screen>
+					<PrimaryButton
+						label={loading ? "Creating..." : "Create task"}
+						onPress={handleSave}
+						disabled={!canSave}
+						loading={loading}
+						size="lg"
+						fullWidth
+					/>
+				</KeyboardAvoidingWrap>
+			</KeyboardAvoidingView>
+		</ScreenContainer>
 	);
 }
 
 const styles = StyleSheet.create({
-	container: {
-		padding: 20,
-		paddingBottom: 32,
-		backgroundColor: "#fff",
+	headerWrap: {
+		paddingHorizontal: spacing.base,
 	},
-	error: {
-		color: "crimson",
-		marginBottom: 12,
-		fontWeight: "600",
+	flex: {
+		flex: 1,
 	},
-	button: {
-		marginTop: 16,
-		backgroundColor: "#111",
-		paddingVertical: 14,
-		borderRadius: 12,
+	content: {
+		paddingHorizontal: spacing.base,
+		paddingBottom: spacing["3xl"],
+	},
+	backButton: {
+		width: 40,
+		height: 40,
+		borderRadius: 20,
 		alignItems: "center",
+		justifyContent: "center",
 	},
-	buttonDisabled: {
-		opacity: 0.6,
+	backPressed: {
+		backgroundColor: colors.surface.surfaceMuted,
 	},
-	buttonText: {
-		color: "#fff",
-		fontWeight: "700",
-		fontSize: 15,
+	errorBanner: {
+		flexDirection: "row",
+		alignItems: "center",
+		gap: spacing.sm,
+		padding: spacing.md,
+		borderRadius: 14,
+		backgroundColor: colors.semantic.dangerBg,
+		marginBottom: spacing.base,
+	},
+	errorText: {
+		...typography.body,
+		color: colors.semantic.danger,
+		flex: 1,
 	},
 });

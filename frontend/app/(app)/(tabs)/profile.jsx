@@ -1,25 +1,52 @@
+// Profile / onboarding screen.
+// ProfileAvatar at top, InputFields for the editable profile, a row of
+// timezone preset chips, sign-out as a danger TextButton that triggers
+// ConfirmationModal. Avatar field is renamed to avatar_url to match
+// the backend's canonical field name (backend/src/services/profile.service.js).
+
+import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
-	ActivityIndicator,
-	Alert,
+	KeyboardAvoidingView,
+	Platform,
 	ScrollView,
 	StyleSheet,
 	Text,
-	TextInput,
-	TouchableOpacity,
 	View,
 } from "react-native";
-import Screen from "../../../src/components/Screen";
+import AppHeader from "../../../src/components/ui/AppHeader";
+import Chip from "../../../src/components/ui/Chip";
+import ConfirmationModal from "../../../src/components/ui/ConfirmationModal";
+import Divider from "../../../src/components/ui/Divider";
+import InputField from "../../../src/components/ui/InputField";
+import KeyboardAvoidingWrap from "../../../src/components/ui/KeyboardAvoidingWrap";
+import LoadingState from "../../../src/components/ui/LoadingState";
+import PrimaryButton from "../../../src/components/ui/PrimaryButton";
+import ProfileAvatar from "../../../src/components/ui/ProfileAvatar";
+import ScreenContainer from "../../../src/components/ui/ScreenContainer";
+import TextButton from "../../../src/components/ui/TextButton";
 import { useAuth } from "../../../src/hooks/useAuth";
+import { useToast } from "../../../src/hooks/useToast";
 import { AuthService } from "../../../src/services/auth.service";
 import { ProfileService } from "../../../src/services/profile.service";
 import { TaskService } from "../../../src/services/task.service";
+import { colors, radius, spacing, typography } from "../../../src/theme";
+
+const TIMEZONE_PRESETS = [
+	"UTC",
+	"America/Los_Angeles",
+	"America/New_York",
+	"Europe/London",
+	"Europe/Berlin",
+	"Asia/Kolkata",
+	"Asia/Tokyo",
+];
 
 const INITIAL_FORM = {
 	username: "",
 	full_name: "",
-	avatar_path: "",
+	avatar_url: "",
 	bio: "",
 	timezone: "",
 	locale: "en",
@@ -28,12 +55,14 @@ const INITIAL_FORM = {
 
 export default function ProfileScreen() {
 	const router = useRouter();
-	const { profile, refreshProfile, user } = useAuth();
+	const { profile, refreshProfile, user, profileLoading } = useAuth();
+	const { show } = useToast();
 
 	const [form, setForm] = useState(INITIAL_FORM);
-	const [loading, _setLoading] = useState(false);
 	const [saving, setSaving] = useState(false);
 	const [error, setError] = useState("");
+	const [logoutVisible, setLogoutVisible] = useState(false);
+	const [loggingOut, setLoggingOut] = useState(false);
 
 	useEffect(() => {
 		if (!profile) return;
@@ -41,7 +70,7 @@ export default function ProfileScreen() {
 		setForm({
 			username: profile.username ?? "",
 			full_name: profile.full_name ?? "",
-			avatar_path: profile.avatar_path ?? "",
+			avatar_url: profile.avatar_url ?? "",
 			bio: profile.bio ?? "",
 			timezone: profile.timezone ?? "",
 			locale: profile.locale ?? "en",
@@ -54,6 +83,13 @@ export default function ProfileScreen() {
 			...previous,
 			[field]: value,
 		}));
+	};
+
+	const canSave =
+		form.username.trim().length > 0 && form.full_name.trim().length > 0;
+
+	const handleAvatarPress = () => {
+		show({ message: "Avatar upload coming soon", tone: "default" });
 	};
 
 	const handleSave = async () => {
@@ -69,222 +105,254 @@ export default function ProfileScreen() {
 			return;
 		}
 
-		try {
-			setSaving(true);
+		setSaving(true);
+		const result = await ProfileService.updateMyProfile({
+			username: form.username.trim(),
+			full_name: form.full_name.trim(),
+			avatar_url: form.avatar_url?.trim() || null,
+			bio: form.bio?.trim() || null,
+			timezone: form.timezone?.trim() || null,
+			locale: form.locale?.trim() || "en",
+			theme: form.theme?.trim() || "system",
+			onboarding_completed: true,
+		});
+		setSaving(false);
 
-			const result = await ProfileService.updateMyProfile({
-				username: form.username.trim(),
-				full_name: form.full_name.trim(),
-				avatar_path: form.avatar_path.trim() || null,
-				bio: form.bio.trim() || null,
-				timezone: form.timezone.trim() || null,
-				locale: form.locale.trim() || "en",
-				theme: form.theme.trim() || "system",
-				onboarding_completed: true,
-			});
-
-			if (!result.success) {
-				setError(result.message || "Failed to update profile.");
-				return;
-			}
-
-			await refreshProfile();
-			Alert.alert("Success", "Profile saved successfully.");
-			router.replace("/(app)/(tabs)");
-		} catch (err) {
-			setError(err?.message || "Something went wrong.");
-		} finally {
-			setSaving(false);
+		if (!result?.success) {
+			setError(result?.message || "Failed to update profile.");
+			return;
 		}
+
+		await refreshProfile();
+		show({ message: "Profile saved", tone: "success" });
 	};
 
-	if (loading) {
+	const handleLogout = async () => {
+		setLoggingOut(true);
+		await TaskService.clearLocalCache();
+		await AuthService.signOut();
+		setLoggingOut(false);
+		setLogoutVisible(false);
+		router.replace("/(auth)/login");
+	};
+
+	if (profileLoading && !profile) {
 		return (
-			<View style={styles.center}>
-				<ActivityIndicator />
-			</View>
+			<ScreenContainer padded={false} background="background">
+				<View style={styles.headerWrap}>
+					<AppHeader title="Profile" />
+				</View>
+				<LoadingState label="Loading profile..." />
+			</ScreenContainer>
 		);
 	}
 
 	return (
-		<Screen>
-			<ScrollView
-				contentContainerStyle={styles.container}
-				keyboardShouldPersistTaps="handled"
+		<ScreenContainer padded={false} background="background">
+			<View style={styles.headerWrap}>
+				<AppHeader
+					title="Profile"
+					subtitle={user?.email ?? "Edit your profile"}
+					trailing={
+						<TextButton
+							label={saving ? "Saving..." : "Save"}
+							tone="brand"
+							disabled={!canSave || saving}
+							onPress={handleSave}
+						/>
+					}
+				/>
+			</View>
+
+			<KeyboardAvoidingView
+				behavior={Platform.OS === "ios" ? "padding" : "height"}
+				style={styles.flex}
+				keyboardVerticalOffset={Platform.OS === "ios" ? spacing.lg : 0}
 			>
-				<Text style={styles.title}>Profile</Text>
-				<Text style={styles.subtitle}>
-					{user?.email ? `Signed in as ${user.email}` : "Edit your profile"}
-				</Text>
+				<KeyboardAvoidingWrap scroll contentContainerStyle={styles.content}>
+					<View style={styles.avatarSection}>
+						<ProfileAvatar
+							uri={form.avatar_url || profile?.avatar_url}
+							name={form.full_name || user?.email}
+							size={96}
+							editable
+							onPress={handleAvatarPress}
+						/>
+						<Text style={styles.avatarHelper}>Tap to change your photo</Text>
+					</View>
 
-				{error ? <Text style={styles.error}>{error}</Text> : null}
+					{error ? (
+						<View style={styles.errorBanner}>
+							<Ionicons
+								name="alert-circle-outline"
+								size={18}
+								color={colors.semantic.danger}
+							/>
+							<Text style={styles.errorText}>{error}</Text>
+						</View>
+					) : null}
 
-				<Text style={styles.label}>Username *</Text>
-				<TextInput
-					style={styles.input}
-					value={form.username}
-					onChangeText={(text) => updateField("username", text)}
-					placeholder="username"
-					autoCapitalize="none"
-				/>
+					<Text style={styles.sectionLabel}>Account</Text>
 
-				<Text style={styles.label}>Full name *</Text>
-				<TextInput
-					style={styles.input}
-					value={form.full_name}
-					onChangeText={(text) => updateField("full_name", text)}
-					placeholder="Full name"
-				/>
+					<InputField
+						label="Username"
+						value={form.username}
+						onChangeText={(text) => updateField("username", text)}
+						placeholder="your-handle"
+						autoCapitalize="none"
+					/>
 
-				<Text style={styles.label}>Avatar path</Text>
-				<TextInput
-					style={styles.input}
-					value={form.avatar_path}
-					onChangeText={(text) => updateField("avatar_path", text)}
-					placeholder="Storage path for avatar"
-					autoCapitalize="none"
-				/>
+					<InputField
+						label="Full name"
+						value={form.full_name}
+						onChangeText={(text) => updateField("full_name", text)}
+						placeholder="Your name"
+					/>
 
-				<Text style={styles.label}>Bio</Text>
-				<TextInput
-					style={[styles.input, styles.textArea]}
-					value={form.bio}
-					onChangeText={(text) => updateField("bio", text)}
-					placeholder="Short bio"
-					multiline
-				/>
+					<InputField
+						label="Bio"
+						value={form.bio}
+						onChangeText={(text) => updateField("bio", text)}
+						placeholder="A short line about you"
+						multiline
+						numberOfLines={4}
+					/>
 
-				<Text style={styles.label}>Timezone</Text>
-				<TextInput
-					style={styles.input}
-					value={form.timezone}
-					onChangeText={(text) => updateField("timezone", text)}
-					placeholder="Asia/Kolkata"
-					autoCapitalize="none"
-				/>
+					<View style={styles.dividerWrap}>
+						<Divider />
+					</View>
 
-				<Text style={styles.label}>Locale</Text>
-				<TextInput
-					style={styles.input}
-					value={form.locale}
-					onChangeText={(text) => updateField("locale", text)}
-					placeholder="en"
-					autoCapitalize="none"
-				/>
+					<Text style={styles.sectionLabel}>Preferences</Text>
 
-				<Text style={styles.label}>Theme</Text>
-				<TextInput
-					style={styles.input}
-					value={form.theme}
-					onChangeText={(text) => updateField("theme", text)}
-					placeholder="system"
-					autoCapitalize="none"
-				/>
+					<InputField
+						label="Timezone"
+						value={form.timezone}
+						onChangeText={(text) => updateField("timezone", text)}
+						placeholder="Asia/Kolkata"
+						autoCapitalize="none"
+						helper="Used to render due dates and reminders."
+					/>
 
-				<TouchableOpacity
-					style={[styles.button, saving && styles.buttonDisabled]}
-					onPress={handleSave}
-					disabled={saving}
-				>
-					{saving ? (
-						<ActivityIndicator color="#fff" />
-					) : (
-						<Text style={styles.buttonText}>Save Profile</Text>
-					)}
-				</TouchableOpacity>
+					<View style={styles.presetRow}>
+						<ScrollView
+							horizontal
+							showsHorizontalScrollIndicator={false}
+							contentContainerStyle={styles.presetScroll}
+						>
+							{TIMEZONE_PRESETS.map((tz) => (
+								<Chip
+									key={tz}
+									label={tz}
+									selected={form.timezone === tz}
+									onPress={() => updateField("timezone", tz)}
+									size="sm"
+								/>
+							))}
+						</ScrollView>
+					</View>
 
-				<TouchableOpacity
-					style={styles.secondaryButton}
-					onPress={() => router.replace("/(app)/(tabs)")}
-				>
-					<Text style={styles.secondaryButtonText}>Back Home</Text>
-				</TouchableOpacity>
-				<TouchableOpacity
-					style={styles.secondaryButton}
-					onPress={async () => {
-						await TaskService.clearLocalCache();
-						await AuthService.signOut();
-						router.replace("/(auth)/login");
-					}}
-				>
-					<Text style={styles.secondaryButtonText}>Logout</Text>
-				</TouchableOpacity>
-			</ScrollView>
-		</Screen>
+					<InputField
+						label="Locale"
+						value={form.locale}
+						onChangeText={(text) => updateField("locale", text)}
+						placeholder="en"
+						autoCapitalize="none"
+					/>
+
+					<PrimaryButton
+						label={saving ? "Saving..." : "Save profile"}
+						onPress={handleSave}
+						loading={saving}
+						disabled={!canSave}
+						size="lg"
+						fullWidth
+						style={styles.saveButton}
+					/>
+
+					<View style={styles.dividerWrap}>
+						<Divider />
+					</View>
+
+					<View style={styles.logoutRow}>
+						<TextButton
+							label="Sign out"
+							tone="danger"
+							fullWidth
+							onPress={() => setLogoutVisible(true)}
+						/>
+					</View>
+				</KeyboardAvoidingWrap>
+			</KeyboardAvoidingView>
+
+			<ConfirmationModal
+				visible={logoutVisible}
+				title="Sign out?"
+				description="Your tasks stay safe. You can sign back in any time."
+				confirmLabel="Sign out"
+				cancelLabel="Cancel"
+				tone="danger"
+				loading={loggingOut}
+				onConfirm={handleLogout}
+				onCancel={() => setLogoutVisible(false)}
+			/>
+		</ScreenContainer>
 	);
 }
 
 const styles = StyleSheet.create({
-	container: {
-		padding: 20,
-		paddingBottom: 32,
-		backgroundColor: "#fff",
+	headerWrap: {
+		paddingHorizontal: spacing.base,
 	},
-	center: {
+	flex: {
 		flex: 1,
+	},
+	content: {
+		paddingHorizontal: spacing.base,
+		paddingBottom: spacing["3xl"],
+	},
+	avatarSection: {
 		alignItems: "center",
-		justifyContent: "center",
+		paddingVertical: spacing.lg,
+		gap: spacing.sm,
 	},
-	title: {
-		fontSize: 28,
-		fontWeight: "700",
-		color: "#111",
+	avatarHelper: {
+		...typography.caption,
+		color: colors.text.secondary,
 	},
-	subtitle: {
-		marginTop: 6,
-		marginBottom: 20,
-		color: "#666",
+	sectionLabel: {
+		...typography.overline,
+		color: colors.text.muted,
+		marginBottom: spacing.sm,
 	},
-	error: {
-		color: "crimson",
-		marginBottom: 12,
-		fontWeight: "600",
+	dividerWrap: {
+		marginVertical: spacing.xl,
 	},
-	label: {
-		marginBottom: 8,
-		fontSize: 14,
-		fontWeight: "600",
-		color: "#222",
+	presetRow: {
+		marginTop: -spacing.sm,
+		marginBottom: spacing.base,
 	},
-	input: {
-		borderWidth: 1,
-		borderColor: "#ddd",
-		borderRadius: 12,
-		paddingHorizontal: 14,
-		paddingVertical: 12,
-		marginBottom: 16,
-		backgroundColor: "#fafafa",
-		color: "#111",
+	presetScroll: {
+		gap: spacing.sm,
+		paddingVertical: spacing.xs,
 	},
-	textArea: {
-		minHeight: 100,
+	saveButton: {
+		marginTop: spacing.lg,
 	},
-	button: {
-		marginTop: 8,
-		backgroundColor: "#111",
-		paddingVertical: 14,
-		borderRadius: 12,
+	errorBanner: {
+		flexDirection: "row",
 		alignItems: "center",
+		gap: spacing.sm,
+		padding: spacing.md,
+		borderRadius: radius.md,
+		backgroundColor: colors.semantic.dangerBg,
+		marginBottom: spacing.base,
 	},
-	buttonDisabled: {
-		opacity: 0.6,
+	errorText: {
+		...typography.body,
+		color: colors.semantic.danger,
+		flex: 1,
 	},
-	buttonText: {
-		color: "#fff",
-		fontWeight: "700",
-		fontSize: 15,
-	},
-	secondaryButton: {
-		marginTop: 12,
-		paddingVertical: 14,
-		borderRadius: 12,
-		alignItems: "center",
-		borderWidth: 1,
-		borderColor: "#ddd",
-	},
-	secondaryButtonText: {
-		color: "#111",
-		fontWeight: "700",
-		fontSize: 15,
+	logoutRow: {
+		marginTop: spacing.md,
 	},
 });

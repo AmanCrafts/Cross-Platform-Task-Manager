@@ -1,22 +1,41 @@
-import { Link, useRouter } from "expo-router";
+// Signup screen — same shape as login, plus a confirm-password field
+// with inline match validation.
+
+import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
-	Alert,
+	KeyboardAvoidingView,
+	Platform,
+	ScrollView,
 	StyleSheet,
 	Text,
-	TextInput,
-	TouchableOpacity,
 	View,
 } from "react-native";
+import InputField from "../../src/components/ui/InputField";
+import PrimaryButton from "../../src/components/ui/PrimaryButton";
+import ScreenContainer from "../../src/components/ui/ScreenContainer";
+import TextButton from "../../src/components/ui/TextButton";
+import { useToast } from "../../src/hooks/useToast";
 import { AuthService } from "../../src/services/auth.service";
+import { colors, radius, spacing, typography } from "../../src/theme";
 
 export default function SignupScreen() {
 	const router = useRouter();
+	const { show } = useToast();
 
 	const [email, setEmail] = useState("");
 	const [password, setPassword] = useState("");
+	const [confirm, setConfirm] = useState("");
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState("");
+
+	const passwordsMismatch = confirm.length > 0 && confirm !== password;
+	const canSubmit =
+		email.trim().length > 0 &&
+		password.length >= 6 &&
+		confirm === password &&
+		!loading;
 
 	const handleSignup = async () => {
 		setError("");
@@ -26,111 +45,192 @@ export default function SignupScreen() {
 			return;
 		}
 
-		try {
-			setLoading(true);
+		if (password.length < 6) {
+			setError("Password must be at least 6 characters.");
+			return;
+		}
 
-			const result = await AuthService.signUp(email.trim(), password);
+		if (password !== confirm) {
+			setError("Passwords do not match.");
+			return;
+		}
 
-			if (!result.success) {
-				setError(result.message || "Signup failed.");
-				return;
-			}
+		setLoading(true);
+		const result = await AuthService.signUp(email.trim(), password);
+		setLoading(false);
 
-			Alert.alert("Success", "Account created successfully.");
+		if (!result.success) {
+			setError(result.message || "Sign up failed. Please try again.");
+			return;
+		}
 
-			if (result.data?.session) {
-				router.replace("/(app)/(tabs)/profile");
-			} else {
-				router.replace("/(auth)/login");
-			}
-		} catch (err) {
-			setError(err?.message || "Something went wrong.");
-		} finally {
-			setLoading(false);
+		show({ message: "Account created", tone: "success" });
+
+		if (result.data?.session) {
+			router.replace("/(app)/(tabs)/profile");
+		} else {
+			router.replace("/(auth)/login");
 		}
 	};
 
 	return (
-		<View style={styles.container}>
-			<Text style={styles.title}>Sign Up</Text>
-
-			{error ? <Text style={styles.error}>{error}</Text> : null}
-
-			<TextInput
-				style={styles.input}
-				placeholder="Email"
-				autoCapitalize="none"
-				keyboardType="email-address"
-				value={email}
-				onChangeText={setEmail}
-			/>
-
-			<TextInput
-				style={styles.input}
-				placeholder="Password"
-				secureTextEntry
-				value={password}
-				onChangeText={setPassword}
-			/>
-
-			<TouchableOpacity
-				style={[styles.button, loading && styles.buttonDisabled]}
-				onPress={handleSignup}
-				disabled={loading}
+		<ScreenContainer background="background" padded>
+			<KeyboardAvoidingView
+				behavior={Platform.OS === "ios" ? "padding" : undefined}
+				style={styles.flex}
 			>
-				<Text style={styles.buttonText}>
-					{loading ? "Creating..." : "Create Account"}
-				</Text>
-			</TouchableOpacity>
+				<ScrollView
+					contentContainerStyle={styles.content}
+					keyboardShouldPersistTaps="handled"
+					keyboardDismissMode="on-drag"
+					showsVerticalScrollIndicator={false}
+				>
+					<View style={styles.brandMark}>
+						<Ionicons
+							name="checkmark-circle"
+							size={28}
+							color={colors.text.inverse}
+						/>
+					</View>
 
-			<Link href="/(auth)/login" style={styles.link}>
-				Already have an account?
-			</Link>
-		</View>
+					<Text style={styles.title}>Create your account</Text>
+					<Text style={styles.subtitle}>
+						Get started with your tasks in seconds.
+					</Text>
+
+					<View style={styles.form}>
+						{error ? (
+							<View style={styles.errorBanner}>
+								<Ionicons
+									name="alert-circle-outline"
+									size={18}
+									color={colors.semantic.danger}
+								/>
+								<Text style={styles.errorText}>{error}</Text>
+							</View>
+						) : null}
+
+						<InputField
+							label="Email"
+							value={email}
+							onChangeText={setEmail}
+							placeholder="you@example.com"
+							keyboardType="email-address"
+							autoCapitalize="none"
+							autoComplete="email"
+							leftIcon={
+								<Ionicons
+									name="mail-outline"
+									size={18}
+									color={colors.text.secondary}
+								/>
+							}
+						/>
+
+						<InputField
+							label="Password"
+							value={password}
+							onChangeText={setPassword}
+							placeholder="At least 6 characters"
+							secureTextEntry
+							autoComplete="password-new"
+							leftIcon={
+								<Ionicons
+									name="lock-closed-outline"
+									size={18}
+									color={colors.text.secondary}
+								/>
+							}
+							helper="Use something memorable — at least 6 characters."
+						/>
+
+						<InputField
+							label="Confirm password"
+							value={confirm}
+							onChangeText={setConfirm}
+							placeholder="Re-enter password"
+							secureTextEntry
+							autoComplete="password-new"
+							error={passwordsMismatch ? "Passwords do not match." : undefined}
+							leftIcon={
+								<Ionicons
+									name="shield-checkmark-outline"
+									size={18}
+									color={colors.text.secondary}
+								/>
+							}
+						/>
+
+						<PrimaryButton
+							label={loading ? "Creating account..." : "Create account"}
+							onPress={handleSignup}
+							disabled={!canSubmit}
+							loading={loading}
+							size="lg"
+							fullWidth
+						/>
+
+						<View style={styles.linkRow}>
+							<TextButton
+								label="Already have an account?"
+								tone="brand"
+								onPress={() => router.replace("/(auth)/login")}
+							/>
+						</View>
+					</View>
+				</ScrollView>
+			</KeyboardAvoidingView>
+		</ScreenContainer>
 	);
 }
 
 const styles = StyleSheet.create({
-	container: {
+	flex: {
 		flex: 1,
+	},
+	content: {
+		flexGrow: 1,
 		justifyContent: "center",
-		padding: 24,
-		backgroundColor: "#fff",
+		paddingVertical: spacing["3xl"],
+	},
+	brandMark: {
+		width: 48,
+		height: 48,
+		borderRadius: radius.md,
+		backgroundColor: colors.brand.primary,
+		alignItems: "center",
+		justifyContent: "center",
+		marginBottom: spacing.xl,
 	},
 	title: {
-		fontSize: 32,
-		fontWeight: "700",
-		marginBottom: 20,
-		color: "#111",
+		...typography.display,
+		color: colors.text.primary,
 	},
-	error: {
-		color: "crimson",
-		marginBottom: 12,
+	subtitle: {
+		...typography.bodyLg,
+		color: colors.text.secondary,
+		marginTop: spacing.sm,
+		marginBottom: spacing["2xl"],
 	},
-	input: {
-		borderWidth: 1,
-		borderColor: "#ddd",
-		borderRadius: 12,
-		padding: 14,
-		marginBottom: 14,
-		backgroundColor: "#fafafa",
+	form: {
+		gap: spacing.base,
 	},
-	button: {
-		backgroundColor: "#111",
-		padding: 14,
-		borderRadius: 12,
+	errorBanner: {
+		flexDirection: "row",
 		alignItems: "center",
-		marginBottom: 14,
+		gap: spacing.sm,
+		padding: spacing.md,
+		borderRadius: radius.md,
+		backgroundColor: colors.semantic.dangerBg,
+		marginBottom: spacing.sm,
 	},
-	buttonDisabled: {
-		opacity: 0.7,
+	errorText: {
+		...typography.body,
+		color: colors.semantic.danger,
+		flex: 1,
 	},
-	buttonText: {
-		color: "#fff",
-		fontWeight: "700",
-	},
-	link: {
-		color: "#111",
-		fontWeight: "600",
+	linkRow: {
+		alignItems: "center",
+		marginTop: spacing.base,
 	},
 });

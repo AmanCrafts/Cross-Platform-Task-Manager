@@ -15,6 +15,7 @@ import {
 } from "../offline/network.monitor";
 import { syncNowIfPossible } from "../offline/sync.engine";
 import { AuthService } from "../services/auth.service";
+import { ProfileService } from "../services/profile.service";
 
 const AuthContext = createContext(null);
 const DEVICE_ID_KEY = "taskflow_device_id";
@@ -53,6 +54,9 @@ export function AuthProvider({ children }) {
 	const [syncError, setSyncError] = useState("");
 	const [lastSyncedAt, setLastSyncedAt] = useState(null);
 
+	const [profile, setProfile] = useState(null);
+	const [profileLoading, setProfileLoading] = useState(false);
+
 	const monitorStopRef = useRef(null);
 	const mountedRef = useRef(true);
 
@@ -90,6 +94,10 @@ export function AuthProvider({ children }) {
 			setSession(nextSession ?? null);
 			setUser(nextSession?.user ?? null);
 			setLoading(false);
+
+			if (!nextSession) {
+				setProfile(null);
+			}
 		});
 
 		return () => {
@@ -139,6 +147,32 @@ export function AuthProvider({ children }) {
 		}
 	}, [deviceId, user?.id]);
 
+	const refreshProfile = useCallback(async () => {
+		if (!user?.id) {
+			setProfile(null);
+			return { success: true, data: null };
+		}
+
+		setProfileLoading(true);
+		try {
+			const response = await ProfileService.getMyProfile();
+			// Backend envelope: { success, data: <profile> }. Be defensive
+			// about nested shapes in case the response is unwrapped.
+			const profileData = response?.data?.data ?? response?.data ?? null;
+			setProfile(profileData);
+			return { success: true, data: profileData };
+		} catch (error) {
+			return {
+				success: false,
+				message: error?.message || "Failed to load profile.",
+			};
+		} finally {
+			if (mountedRef.current) {
+				setProfileLoading(false);
+			}
+		}
+	}, [user?.id]);
+
 	useEffect(() => {
 		let cancelled = false;
 
@@ -163,6 +197,10 @@ export function AuthProvider({ children }) {
 
 				const networkState = await NetInfo.fetch();
 
+				// Kick off sync (if online) and profile fetch in parallel.
+				// Profile fetch does not block sync and does not gate UI.
+				const profileFetch = refreshProfile();
+
 				if (isNetworkOnline(networkState)) {
 					const result = await syncNowIfPossible({
 						userId: user.id,
@@ -178,6 +216,8 @@ export function AuthProvider({ children }) {
 						setSyncError(result.message || "Initial sync failed.");
 					}
 				}
+
+				await profileFetch;
 
 				if (cancelled || !mountedRef.current) return;
 
@@ -211,7 +251,7 @@ export function AuthProvider({ children }) {
 			cancelled = true;
 			stopMonitor(monitorStopRef);
 		};
-	}, [user?.id]);
+	}, [user?.id, refreshProfile]);
 
 	const value = useMemo(
 		() => ({
@@ -225,6 +265,13 @@ export function AuthProvider({ children }) {
 			syncError,
 			lastSyncedAt,
 			refreshSync,
+
+			profile,
+			profileLoading,
+			refreshProfile,
+			needsOnboarding:
+				!!session &&
+				(profile === null || profile?.onboarding_completed === false),
 		}),
 		[
 			session,
@@ -235,6 +282,9 @@ export function AuthProvider({ children }) {
 			syncError,
 			lastSyncedAt,
 			refreshSync,
+			profile,
+			profileLoading,
+			refreshProfile,
 		],
 	);
 

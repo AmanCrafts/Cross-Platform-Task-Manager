@@ -1,34 +1,27 @@
+// TaskForm — shared form for create/edit screens.
+// External API: form, setForm, disabled. Title, description, priority,
+// due date, reminder, recurrence, and pinned toggle are all rendered here.
+// The redundant "Recurring" Switch row is gone — `is_recurring` is derived
+// from the recurrence value in the screen-side payload builder.
+
+import { Ionicons } from "@expo/vector-icons";
 import { memo } from "react";
-import {
-	StyleSheet,
-	Switch,
-	Text,
-	TextInput,
-	TouchableOpacity,
-	View,
-} from "react-native";
+import { StyleSheet, Switch, Text, View } from "react-native";
+import { colors, spacing, typography } from "../theme";
+import Chip from "./ui/Chip";
+import DatePickerField from "./ui/DatePickerField";
+import InputField from "./ui/InputField";
+import { RECURRENCE_OPTIONS } from "./ui/recurrence.options";
+import SelectField from "./ui/SelectField";
 
 const PRIORITIES = ["low", "medium", "high", "urgent"];
-const STATUSES = ["todo", "in_progress", "done", "archived"];
 
-function Chip({ label, active, disabled, onPress }) {
-	return (
-		<TouchableOpacity
-			onPress={disabled ? undefined : onPress}
-			disabled={disabled}
-			style={[
-				styles.chip,
-				active && styles.chipActive,
-				disabled && styles.chipDisabled,
-			]}
-			activeOpacity={0.8}
-		>
-			<Text style={[styles.chipText, active && styles.chipTextActive]}>
-				{label}
-			</Text>
-		</TouchableOpacity>
-	);
-}
+const PRIORITY_TONE = {
+	low: "priority-low",
+	medium: "priority-medium",
+	high: "priority-high",
+	urgent: "priority-urgent",
+};
 
 function updateField(setForm, field, value) {
 	setForm((previous) => ({
@@ -37,110 +30,108 @@ function updateField(setForm, field, value) {
 	}));
 }
 
-function TaskForm({ mode = "create", form, setForm, disabled = false }) {
-	const heading = mode === "edit" ? "Task Details" : "Create Task";
-	const subtitle =
-		mode === "edit"
-			? "Update the task details below."
-			: "Fill in the details for your task.";
+function parseReminderMax(dueAt) {
+	if (!dueAt) return undefined;
+	const date = new Date(dueAt);
+	if (Number.isNaN(date.getTime())) return undefined;
+	return date;
+}
+
+function TaskForm({ form, setForm, disabled = false }) {
+	const reminderMaxDate = parseReminderMax(form.due_at);
 
 	return (
-		<View>
-			<Text style={styles.title}>{heading}</Text>
-			<Text style={styles.subtitle}>{subtitle}</Text>
-
-			<Text style={styles.label}>Title *</Text>
-			<TextInput
+		<View style={styles.container}>
+			<InputField
+				label="Title"
 				value={form.title ?? ""}
 				onChangeText={(text) => updateField(setForm, "title", text)}
-				placeholder="Enter task title"
-				style={styles.input}
+				placeholder="What needs to be done?"
 				autoCapitalize="sentences"
 				editable={!disabled}
 			/>
 
-			<Text style={styles.label}>Description</Text>
-			<TextInput
+			<InputField
+				label="Description"
 				value={form.description ?? ""}
 				onChangeText={(text) => updateField(setForm, "description", text)}
 				placeholder="Add a short description"
-				style={[styles.input, styles.textArea]}
 				multiline
-				textAlignVertical="top"
+				numberOfLines={4}
 				editable={!disabled}
 			/>
 
-			<Text style={styles.label}>Priority</Text>
+			<Text style={styles.sectionLabel}>Priority</Text>
 			<View style={styles.chipRow}>
 				{PRIORITIES.map((item) => (
 					<Chip
 						key={item}
-						label={item}
-						active={form.priority === item}
-						disabled={disabled}
+						label={item.charAt(0).toUpperCase() + item.slice(1)}
+						tone={PRIORITY_TONE[item]}
+						selected={form.priority === item}
 						onPress={() => updateField(setForm, "priority", item)}
-					/>
-				))}
-			</View>
-
-			<Text style={styles.label}>Status</Text>
-			<View style={styles.chipRow}>
-				{STATUSES.map((item) => (
-					<Chip
-						key={item}
-						label={item}
-						active={form.status === item}
 						disabled={disabled}
-						onPress={() => updateField(setForm, "status", item)}
 					/>
 				))}
 			</View>
 
-			<Text style={styles.label}>Due date</Text>
-			<TextInput
-				value={form.due_at ?? ""}
-				onChangeText={(text) => updateField(setForm, "due_at", text)}
-				placeholder="YYYY-MM-DD or ISO date"
-				style={styles.input}
-				autoCapitalize="none"
+			<DatePickerField
+				label="Due date"
+				value={form.due_at || null}
+				onChange={(iso) => updateField(setForm, "due_at", iso ?? "")}
+				placeholder="Set a due date"
+				minimumDate={new Date()}
 				editable={!disabled}
 			/>
 
-			<Text style={styles.label}>Reminder date</Text>
-			<TextInput
-				value={form.reminder_at ?? ""}
-				onChangeText={(text) => updateField(setForm, "reminder_at", text)}
-				placeholder="YYYY-MM-DD or ISO date"
-				style={styles.input}
-				autoCapitalize="none"
+			<DatePickerField
+				label="Reminder"
+				value={form.reminder_at || null}
+				onChange={(iso) => updateField(setForm, "reminder_at", iso ?? "")}
+				placeholder="Set a reminder"
+				minimumDate={new Date()}
+				maximumDate={reminderMaxDate}
 				editable={!disabled}
+				helper={reminderMaxDate ? `Cannot be after the due date.` : undefined}
 			/>
 
-			<Text style={styles.label}>Recurrence rule</Text>
-			<TextInput
+			<SelectField
+				label="Recurrence"
 				value={form.recurrence_rule ?? ""}
-				onChangeText={(text) => updateField(setForm, "recurrence_rule", text)}
-				placeholder="Optional recurrence rule"
-				style={styles.input}
-				autoCapitalize="none"
+				options={RECURRENCE_OPTIONS}
+				onChange={(value) =>
+					updateField(setForm, "recurrence_rule", value ?? "")
+				}
+				leftIcon={
+					<Ionicons
+						name="repeat-outline"
+						size={18}
+						color={colors.text.secondary}
+					/>
+				}
+				placeholder="Choose how often"
+				helper="Leave as None for one-off tasks."
 				editable={!disabled}
 			/>
 
 			<View style={styles.switchRow}>
-				<Text style={styles.switchLabel}>Pinned</Text>
+				<View style={styles.switchLabelBlock}>
+					<Ionicons
+						name="bookmark-outline"
+						size={18}
+						color={colors.text.secondary}
+					/>
+					<Text style={styles.switchLabel}>Pinned</Text>
+				</View>
 				<Switch
 					value={!!form.is_pinned}
 					onValueChange={(value) => updateField(setForm, "is_pinned", value)}
 					disabled={disabled}
-				/>
-			</View>
-
-			<View style={styles.switchRow}>
-				<Text style={styles.switchLabel}>Recurring</Text>
-				<Switch
-					value={!!form.is_recurring}
-					onValueChange={(value) => updateField(setForm, "is_recurring", value)}
-					disabled={disabled}
+					trackColor={{
+						false: colors.border.strong,
+						true: colors.brand.primary,
+					}}
+					thumbColor={colors.surface.surface}
 				/>
 			</View>
 		</View>
@@ -150,73 +141,40 @@ function TaskForm({ mode = "create", form, setForm, disabled = false }) {
 export default memo(TaskForm);
 
 const styles = StyleSheet.create({
-	title: {
-		fontSize: 28,
-		fontWeight: "700",
-		color: "#111",
+	container: {
+		paddingBottom: spacing.xl,
 	},
-	subtitle: {
-		marginTop: 6,
-		marginBottom: 20,
-		color: "#666",
-	},
-	label: {
-		marginBottom: 8,
-		fontSize: 14,
-		fontWeight: "600",
-		color: "#222",
-	},
-	input: {
-		borderWidth: 1,
-		borderColor: "#ddd",
-		borderRadius: 12,
-		paddingHorizontal: 14,
-		paddingVertical: 12,
-		marginBottom: 16,
-		backgroundColor: "#fafafa",
-		color: "#111",
-	},
-	textArea: {
-		minHeight: 110,
+	sectionLabel: {
+		...typography.overline,
+		color: colors.text.muted,
+		marginBottom: spacing.sm,
 	},
 	chipRow: {
 		flexDirection: "row",
 		flexWrap: "wrap",
-		gap: 10,
-		marginBottom: 16,
-	},
-	chip: {
-		borderWidth: 1,
-		borderColor: "#ddd",
-		borderRadius: 999,
-		paddingHorizontal: 14,
-		paddingVertical: 10,
-		backgroundColor: "#fff",
-	},
-	chipDisabled: {
-		opacity: 0.6,
-	},
-	chipActive: {
-		backgroundColor: "#111",
-		borderColor: "#111",
-	},
-	chipText: {
-		color: "#333",
-		textTransform: "capitalize",
-	},
-	chipTextActive: {
-		color: "#fff",
+		gap: spacing.sm,
+		marginBottom: spacing.lg,
 	},
 	switchRow: {
 		flexDirection: "row",
 		alignItems: "center",
 		justifyContent: "space-between",
-		marginBottom: 14,
-		paddingVertical: 4,
+		paddingVertical: spacing.md,
+		paddingHorizontal: spacing.md,
+		backgroundColor: colors.surface.surface,
+		borderRadius: 14,
+		borderWidth: 1,
+		borderColor: colors.border.subtle,
+		marginBottom: spacing.md,
+	},
+	switchLabelBlock: {
+		flexDirection: "row",
+		alignItems: "center",
+		gap: spacing.sm,
 	},
 	switchLabel: {
-		fontSize: 15,
-		fontWeight: "600",
-		color: "#222",
+		...typography.bodyLg,
+		color: colors.text.primary,
+		fontWeight: "500",
 	},
 });

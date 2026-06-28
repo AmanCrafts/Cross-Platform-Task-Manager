@@ -1,17 +1,41 @@
+// Task detail / edit — single screen, always-editable, three states:
+//   - Active: header + form sections + Save + Delete (modal confirm).
+//   - Deleted: warning banner + form disabled + Restore.
+//   - Loading / not-found: spinner or empty state with back.
+//
+// The form is rendered inline (no outer Card) so dividers can sit between
+// major sections. Local helpers — SectionHeader, ToggleRow, MetadataLine —
+// exist only for this screen. Save/Delete use ConfirmationModal instead
+// of Alert.alert.
+
+import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-	ActivityIndicator,
-	Alert,
+	Pressable,
 	ScrollView,
 	StyleSheet,
+	Switch,
 	Text,
-	TouchableOpacity,
 	View,
 } from "react-native";
-import Screen from "../../../src/components/Screen";
-import TaskForm from "../../../src/components/TaskForm";
+import Animated, { FadeIn, SlideInDown } from "react-native-reanimated";
+import AppHeader from "../../../src/components/ui/AppHeader";
+import Chip from "../../../src/components/ui/Chip";
+import ConfirmationModal from "../../../src/components/ui/ConfirmationModal";
+import DatePickerField from "../../../src/components/ui/DatePickerField";
+import Divider from "../../../src/components/ui/Divider";
+import InputField from "../../../src/components/ui/InputField";
+import KeyboardAvoidingWrap from "../../../src/components/ui/KeyboardAvoidingWrap";
+import LoadingState from "../../../src/components/ui/LoadingState";
+import PrimaryButton from "../../../src/components/ui/PrimaryButton";
+import { RECURRENCE_OPTIONS } from "../../../src/components/ui/recurrence.options";
+import ScreenContainer from "../../../src/components/ui/ScreenContainer";
+import SelectField from "../../../src/components/ui/SelectField";
+import TextButton from "../../../src/components/ui/TextButton";
+import { useToast } from "../../../src/hooks/useToast";
 import { TaskService } from "../../../src/services/task.service";
+import { colors, radius, spacing, typography } from "../../../src/theme";
 
 const EMPTY_FORM = {
 	title: "",
@@ -22,7 +46,29 @@ const EMPTY_FORM = {
 	reminder_at: "",
 	recurrence_rule: "",
 	is_pinned: false,
-	is_recurring: false,
+};
+
+const PRIORITIES = ["low", "medium", "high", "urgent"];
+
+const PRIORITY_TONE = {
+	low: "priority-low",
+	medium: "priority-medium",
+	high: "priority-high",
+	urgent: "priority-urgent",
+};
+
+const STATUS_LABEL = {
+	todo: "To do",
+	in_progress: "In progress",
+	done: "Done",
+	archived: "Archived",
+};
+
+const STATUS_TONE = {
+	todo: "status-todo",
+	in_progress: "status-in_progress",
+	done: "status-done",
+	archived: "status-archived",
 };
 
 function isValidDate(value) {
@@ -41,7 +87,6 @@ function toForm(task) {
 		reminder_at: task?.reminder_at ? String(task.reminder_at) : "",
 		recurrence_rule: task?.recurrence_rule ?? "",
 		is_pinned: !!task?.is_pinned,
-		is_recurring: !!task?.is_recurring,
 	};
 }
 
@@ -51,24 +96,75 @@ function toIsoOrUndefined(value) {
 	return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
 }
 
-function buildPayload(form) {
-	return {
-		title: form.title.trim(),
-		description: form.description.trim(),
-		status: form.status,
-		priority: form.priority,
-		due_at: toIsoOrUndefined(form.due_at),
-		reminder_at: toIsoOrUndefined(form.reminder_at),
-		is_pinned: form.is_pinned,
-		is_recurring: form.is_recurring,
-		recurrence_rule: form.recurrence_rule.trim() || undefined,
-		client_timestamp: new Date().toISOString(),
-	};
+function formatLongDate(value) {
+	if (!value) return "";
+	const date = new Date(value);
+	if (Number.isNaN(date.getTime())) return "";
+	return date.toLocaleDateString(undefined, {
+		weekday: "short",
+		month: "short",
+		day: "numeric",
+		year:
+			date.getFullYear() !== new Date().getFullYear() ? "numeric" : undefined,
+	});
 }
+
+function formatDateTime(value) {
+	if (!value) return "";
+	const date = new Date(value);
+	if (Number.isNaN(date.getTime())) return "";
+	return date.toLocaleString(undefined, {
+		month: "short",
+		day: "numeric",
+		year: "numeric",
+		hour: "numeric",
+		minute: "2-digit",
+	});
+}
+
+function updateField(setForm, field, value) {
+	setForm((previous) => ({ ...previous, [field]: value }));
+}
+
+// --- Local helpers (single consumer: this screen) ---------------------------
+
+function SectionHeader({ children, style }) {
+	return <Text style={[styles.sectionHeader, style]}>{children}</Text>;
+}
+
+function ToggleRow({ icon, label, value, onValueChange, disabled }) {
+	return (
+		<View style={styles.toggleRow}>
+			<View style={styles.toggleLabelBlock}>
+				{icon ? <View style={styles.toggleIcon}>{icon}</View> : null}
+				<Text style={styles.toggleLabel}>{label}</Text>
+			</View>
+			<Switch
+				value={!!value}
+				onValueChange={onValueChange}
+				disabled={disabled}
+				trackColor={{ false: colors.border.strong, true: colors.brand.primary }}
+				thumbColor={colors.surface.surface}
+			/>
+		</View>
+	);
+}
+
+function MetadataLine({ label, value }) {
+	return (
+		<View style={styles.metaLine}>
+			<Text style={styles.metaLabel}>{label}</Text>
+			<Text style={styles.metaValue}>{value}</Text>
+		</View>
+	);
+}
+
+// --- Screen ----------------------------------------------------------------
 
 export default function TaskDetailsScreen() {
 	const router = useRouter();
 	const params = useLocalSearchParams();
+	const { show } = useToast();
 
 	const taskId = useMemo(() => {
 		if (Array.isArray(params.id)) return params.id[0];
@@ -82,6 +178,7 @@ export default function TaskDetailsScreen() {
 	const [deleting, setDeleting] = useState(false);
 	const [restoring, setRestoring] = useState(false);
 	const [error, setError] = useState("");
+	const [confirmDelete, setConfirmDelete] = useState(false);
 
 	const isDeleted = !!task?.deleted_at;
 
@@ -113,6 +210,30 @@ export default function TaskDetailsScreen() {
 		loadTask();
 	}, [loadTask]);
 
+	const formDisabled = isDeleted || saving || deleting || restoring;
+	const canSave =
+		!isDeleted &&
+		form.title.trim().length > 0 &&
+		!saving &&
+		!deleting &&
+		!restoring;
+
+	const reminderMaxDate = useMemo(() => {
+		if (!form.due_at) return undefined;
+		const date = new Date(form.due_at);
+		return Number.isNaN(date.getTime()) ? undefined : date;
+	}, [form.due_at]);
+
+	const headerSubtitle = useMemo(() => {
+		if (!task) return undefined;
+		if (isDeleted) {
+			const moved = task.deleted_at ? formatLongDate(task.deleted_at) : "";
+			return moved ? `In trash · moved ${moved}` : "In trash";
+		}
+		const stamp = task.updated_at ?? task.created_at;
+		return formatLongDate(stamp ?? new Date());
+	}, [task, isDeleted]);
+
 	const handleSave = async () => {
 		setError("");
 
@@ -131,304 +252,473 @@ export default function TaskDetailsScreen() {
 			return;
 		}
 
-		try {
-			setSaving(true);
+		setSaving(true);
+		const result = await TaskService.update(taskId, {
+			title: form.title.trim(),
+			description: form.description?.trim() || null,
+			status: form.status,
+			priority: form.priority,
+			due_at: toIsoOrUndefined(form.due_at) ?? null,
+			reminder_at: toIsoOrUndefined(form.reminder_at) ?? null,
+			is_pinned: form.is_pinned,
+			is_recurring: Boolean(form.recurrence_rule),
+			recurrence_rule: form.recurrence_rule?.trim() || null,
+			client_timestamp: new Date().toISOString(),
+		});
+		setSaving(false);
 
-			const result = await TaskService.update(taskId, buildPayload(form));
-
-			if (!result.success) {
-				setError(result.message || "Failed to update task.");
-				return;
-			}
-
-			setTask(result.data);
-			setForm(toForm(result.data));
-
-			Alert.alert("Success", "Task updated successfully.");
-			router.back();
-		} catch (err) {
-			setError(err?.message || "Something went wrong.");
-		} finally {
-			setSaving(false);
+		if (!result.success) {
+			setError(result.message || "Failed to update task.");
+			return;
 		}
+
+		setTask(result.data);
+		setForm(toForm(result.data));
+		show({ message: "Task updated", tone: "success" });
 	};
 
-	const handleDelete = () => {
-		Alert.alert(
-			"Delete task",
-			"This task will be soft deleted. You can restore it later.",
-			[
-				{ text: "Cancel", style: "cancel" },
-				{
-					text: "Delete",
-					style: "destructive",
-					onPress: async () => {
-						try {
-							setDeleting(true);
-							const result = await TaskService.remove(taskId);
+	const handleDelete = async () => {
+		setDeleting(true);
+		const result = await TaskService.remove(taskId);
+		setDeleting(false);
+		setConfirmDelete(false);
 
-							if (!result.success) {
-								setError(result.message || "Failed to delete task.");
-								return;
-							}
+		if (!result.success) {
+			setError(result.message || "Failed to delete task.");
+			return;
+		}
 
-							// Task is permanently deleted — go back to the list.
-							Alert.alert("Deleted", "Task deleted successfully.", [
-								{ text: "OK", onPress: () => router.back() },
-							]);
-						} catch (err) {
-							setError(err?.message || "Something went wrong.");
-						} finally {
-							setDeleting(false);
-						}
-					},
-				},
-			],
-		);
+		show({ message: "Task moved to trash", tone: "default" });
+		router.back();
 	};
 
 	const handleRestore = async () => {
-		try {
-			setRestoring(true);
-			const result = await TaskService.restore(taskId);
+		setRestoring(true);
+		const result = await TaskService.restore(taskId);
+		setRestoring(false);
 
-			if (!result.success) {
-				setError(result.message || "Failed to restore task.");
-				return;
-			}
-
-			setTask(result.data);
-			setForm(toForm(result.data));
-			Alert.alert("Restored", "Task restored successfully.");
-		} catch (err) {
-			setError(err?.message || "Something went wrong.");
-		} finally {
-			setRestoring(false);
+		if (!result.success) {
+			setError(result.message || "Failed to restore task.");
+			return;
 		}
+
+		setTask(result.data);
+		setForm(toForm(result.data));
+		show({ message: "Task restored", tone: "success" });
 	};
+
+	const renderHeader = () => (
+		<View style={styles.headerWrap}>
+			<AppHeader
+				title="Task"
+				subtitle={headerSubtitle}
+				leading={
+					<Pressable
+						onPress={() => router.back()}
+						accessibilityRole="button"
+						accessibilityLabel="Back"
+						hitSlop={8}
+						style={({ pressed }) => [
+							styles.backButton,
+							pressed ? styles.backPressed : null,
+						]}
+					>
+						<Ionicons
+							name="chevron-back"
+							size={22}
+							color={colors.text.primary}
+						/>
+					</Pressable>
+				}
+				rightSlot={
+					task ? (
+						<Chip
+							label={STATUS_LABEL[task.status] ?? task.status}
+							tone={STATUS_TONE[task.status] ?? "status-todo"}
+							size="sm"
+						/>
+					) : null
+				}
+			/>
+		</View>
+	);
 
 	if (loading) {
 		return (
-			<View style={styles.center}>
-				<ActivityIndicator />
-				<Text style={styles.loadingText}>Loading task...</Text>
-			</View>
+			<ScreenContainer padded={false} background="background">
+				{renderHeader()}
+				<LoadingState label="Loading task..." />
+			</ScreenContainer>
 		);
 	}
 
 	if (!task) {
 		return (
-			<View style={styles.center}>
-				<Text style={styles.errorTitle}>Task not found</Text>
-				{error ? <Text style={styles.errorText}>{error}</Text> : null}
-				<TouchableOpacity
-					style={styles.backButton}
-					onPress={() => router.back()}
-				>
-					<Text style={styles.backButtonText}>Go Back</Text>
-				</TouchableOpacity>
-			</View>
+			<ScreenContainer padded={false} background="background">
+				{renderHeader()}
+				<View style={styles.notFound}>
+					<Text style={styles.notFoundTitle}>Task not found</Text>
+					{error ? <Text style={styles.notFoundText}>{error}</Text> : null}
+				</View>
+			</ScreenContainer>
 		);
 	}
 
-	const formDisabled = isDeleted || saving || deleting || restoring;
-
 	return (
-		<Screen>
-			<ScrollView
-				contentContainerStyle={styles.container}
-				keyboardShouldPersistTaps="handled"
-			>
-				<View style={styles.header}>
-					<Text style={styles.pageTitle}>Task Details</Text>
-					<Text style={styles.pageSubtitle}>
-						{isDeleted ? "Deleted task" : "Active task"}
-					</Text>
-				</View>
+		<ScreenContainer padded={false} background="background">
+			{renderHeader()}
 
-				{error ? <Text style={styles.errorText}>{error}</Text> : null}
-
-				{isDeleted ? (
-					<View style={styles.deletedBanner}>
-						<Text style={styles.deletedBannerText}>
-							This task is deleted and currently read-only.
-						</Text>
-					</View>
-				) : null}
-
-				<TaskForm
-					mode="edit"
-					form={form}
-					setForm={setForm}
-					disabled={formDisabled}
-				/>
-
-				{!isDeleted ? (
-					<>
-						<TouchableOpacity
-							style={[styles.primaryButton, saving && styles.buttonDisabled]}
-							onPress={handleSave}
-							disabled={saving || deleting || restoring}
-						>
-							{saving ? (
-								<ActivityIndicator color="#fff" />
-							) : (
-								<Text style={styles.primaryButtonText}>Save Changes</Text>
-							)}
-						</TouchableOpacity>
-
-						<TouchableOpacity
-							style={[styles.deleteButton, deleting && styles.buttonDisabled]}
-							onPress={handleDelete}
-							disabled={saving || deleting || restoring}
-						>
-							{deleting ? (
-								<ActivityIndicator color="#b00020" />
-							) : (
-								<Text style={styles.deleteButtonText}>Delete Task</Text>
-							)}
-						</TouchableOpacity>
-					</>
-				) : (
-					<TouchableOpacity
-						style={[styles.restoreButton, restoring && styles.buttonDisabled]}
-						onPress={handleRestore}
-						disabled={saving || deleting || restoring}
-					>
-						{restoring ? (
-							<ActivityIndicator color="#fff" />
-						) : (
-							<Text style={styles.restoreButtonText}>Restore Task</Text>
-						)}
-					</TouchableOpacity>
-				)}
-
-				<TouchableOpacity
-					style={styles.secondaryButton}
-					onPress={() => router.back()}
-					disabled={saving || deleting || restoring}
+			<KeyboardAvoidingWrap scroll contentContainerStyle={styles.content}>
+				<Animated.View
+					entering={FadeIn.duration(220).delay(0)}
+					style={styles.body}
 				>
-					<Text style={styles.secondaryButtonText}>Back</Text>
-				</TouchableOpacity>
-			</ScrollView>
-		</Screen>
+					{/* Title — page-level, borderless, display typography */}
+					<Animated.View entering={SlideInDown.duration(260)}>
+						<InputField
+							label=""
+							value={form.title}
+							onChangeText={(text) => updateField(setForm, "title", text)}
+							placeholder="Task title"
+							autoCapitalize="sentences"
+							editable={!formDisabled}
+							inputStyle={styles.titleInput}
+							style={styles.titleField}
+						/>
+					</Animated.View>
+
+					{/* Description */}
+					<InputField
+						label="Description"
+						value={form.description}
+						onChangeText={(text) => updateField(setForm, "description", text)}
+						placeholder="Add a short description"
+						multiline
+						numberOfLines={4}
+						editable={!formDisabled}
+					/>
+
+					{/* Priority */}
+					<SectionHeader>Priority</SectionHeader>
+					<ScrollView
+						horizontal
+						showsHorizontalScrollIndicator={false}
+						contentContainerStyle={styles.priorityRow}
+					>
+						{PRIORITIES.map((item) => (
+							<Chip
+								key={item}
+								label={item.charAt(0).toUpperCase() + item.slice(1)}
+								tone={PRIORITY_TONE[item]}
+								selected={form.priority === item}
+								onPress={() => updateField(setForm, "priority", item)}
+								disabled={formDisabled}
+							/>
+						))}
+					</ScrollView>
+
+					{/* Schedule */}
+					<View style={styles.dividerBlock}>
+						<Divider />
+					</View>
+					<SectionHeader>Schedule</SectionHeader>
+
+					<DatePickerField
+						label="Due date"
+						value={form.due_at || null}
+						onChange={(iso) => updateField(setForm, "due_at", iso ?? "")}
+						placeholder="Set a due date"
+						minimumDate={new Date()}
+						editable={!formDisabled}
+					/>
+
+					<DatePickerField
+						label="Reminder"
+						value={form.reminder_at || null}
+						onChange={(iso) => updateField(setForm, "reminder_at", iso ?? "")}
+						placeholder="Set a reminder"
+						minimumDate={new Date()}
+						maximumDate={reminderMaxDate}
+						editable={!formDisabled}
+						helper={
+							reminderMaxDate ? "Cannot be after the due date." : undefined
+						}
+					/>
+
+					<SelectField
+						label="Recurrence"
+						value={form.recurrence_rule ?? ""}
+						options={RECURRENCE_OPTIONS}
+						onChange={(value) =>
+							updateField(setForm, "recurrence_rule", value ?? "")
+						}
+						leftIcon={
+							<Ionicons
+								name="repeat-outline"
+								size={18}
+								color={colors.text.secondary}
+							/>
+						}
+						placeholder="Choose how often"
+						helper="Leave as None for one-off tasks."
+						editable={!formDisabled}
+					/>
+
+					{/* Options */}
+					<View style={styles.dividerBlock}>
+						<Divider />
+					</View>
+					<SectionHeader>Options</SectionHeader>
+					<ToggleRow
+						icon={
+							<Ionicons
+								name="bookmark-outline"
+								size={18}
+								color={colors.text.secondary}
+							/>
+						}
+						label="Pinned"
+						value={form.is_pinned}
+						onValueChange={(value) => updateField(setForm, "is_pinned", value)}
+						disabled={formDisabled}
+					/>
+
+					{/* Metadata */}
+					<View style={styles.dividerBlock}>
+						<Divider />
+					</View>
+					<View style={styles.metaBlock}>
+						{task.created_at ? (
+							<MetadataLine
+								label="Created"
+								value={formatDateTime(task.created_at)}
+							/>
+						) : null}
+						{task.updated_at ? (
+							<MetadataLine
+								label="Updated"
+								value={formatDateTime(task.updated_at)}
+							/>
+						) : null}
+						{task.completed_at ? (
+							<MetadataLine
+								label="Completed"
+								value={formatDateTime(task.completed_at)}
+							/>
+						) : null}
+					</View>
+
+					{/* Banners */}
+					{isDeleted ? (
+						<View style={styles.deletedBanner}>
+							<Ionicons
+								name="trash-outline"
+								size={18}
+								color={colors.semantic.warning}
+							/>
+							<Text style={styles.deletedBannerText}>
+								This task is in the trash.
+							</Text>
+						</View>
+					) : null}
+
+					{error ? (
+						<View style={styles.errorBanner}>
+							<Ionicons
+								name="alert-circle-outline"
+								size={18}
+								color={colors.semantic.danger}
+							/>
+							<Text style={styles.errorText}>{error}</Text>
+						</View>
+					) : null}
+
+					{/* Actions */}
+					{isDeleted ? (
+						<PrimaryButton
+							label={restoring ? "Restoring..." : "Restore task"}
+							onPress={handleRestore}
+							loading={restoring}
+							disabled={saving || deleting}
+							size="lg"
+							fullWidth
+						/>
+					) : (
+						<>
+							<PrimaryButton
+								label={saving ? "Saving..." : "Save changes"}
+								onPress={handleSave}
+								loading={saving}
+								disabled={!canSave}
+								size="lg"
+								fullWidth
+							/>
+							<View style={styles.deleteRow}>
+								<TextButton
+									label={deleting ? "Deleting..." : "Delete task"}
+									tone="danger"
+									onPress={() => setConfirmDelete(true)}
+									disabled={saving || restoring || deleting}
+								/>
+							</View>
+						</>
+					)}
+				</Animated.View>
+			</KeyboardAvoidingWrap>
+
+			<ConfirmationModal
+				visible={confirmDelete}
+				title="Delete task?"
+				description="You can restore it later from the trash."
+				confirmLabel="Delete"
+				cancelLabel="Cancel"
+				tone="danger"
+				loading={deleting}
+				onConfirm={handleDelete}
+				onCancel={() => setConfirmDelete(false)}
+			/>
+		</ScreenContainer>
 	);
 }
 
 const styles = StyleSheet.create({
-	container: {
-		padding: 20,
-		paddingBottom: 32,
-		backgroundColor: "#fff",
+	headerWrap: {
+		paddingHorizontal: spacing.base,
 	},
-	center: {
+	content: {
+		paddingHorizontal: spacing.base,
+		paddingBottom: spacing["3xl"],
+	},
+	body: {
+		flex: 1,
+	},
+	backButton: {
+		width: 40,
+		height: 40,
+		borderRadius: 20,
+		alignItems: "center",
+		justifyContent: "center",
+	},
+	backPressed: {
+		backgroundColor: colors.surface.surfaceMuted,
+	},
+	titleField: {
+		marginTop: spacing.sm,
+		marginBottom: spacing.lg,
+	},
+	titleInput: {
+		...typography.display,
+		paddingVertical: 0,
+	},
+	sectionHeader: {
+		...typography.overline,
+		color: colors.text.muted,
+		marginTop: spacing.lg,
+		marginBottom: spacing.sm,
+	},
+	priorityRow: {
+		paddingVertical: spacing.xs,
+		gap: spacing.sm,
+		paddingRight: spacing.base,
+		marginBottom: spacing.sm,
+	},
+	dividerBlock: {
+		marginTop: spacing.xl,
+		marginBottom: spacing.lg,
+	},
+	toggleRow: {
+		flexDirection: "row",
+		alignItems: "center",
+		justifyContent: "space-between",
+		paddingVertical: spacing.md,
+		paddingHorizontal: spacing.md,
+		backgroundColor: colors.surface.surface,
+		borderRadius: 14,
+		borderWidth: 1,
+		borderColor: colors.border.subtle,
+		marginBottom: spacing.md,
+	},
+	toggleLabelBlock: {
+		flexDirection: "row",
+		alignItems: "center",
+		gap: spacing.sm,
+	},
+	toggleIcon: {
+		marginRight: spacing.sm,
+		alignContent: "center",
+		justifyContent: "center",
+	},
+	toggleLabel: {
+		...typography.bodyLg,
+		color: colors.text.primary,
+		fontWeight: "500",
+	},
+	metaBlock: {
+		gap: spacing.xs,
+		marginBottom: spacing.lg,
+	},
+	metaLine: {
+		flexDirection: "row",
+		justifyContent: "space-between",
+		alignItems: "baseline",
+		gap: spacing.md,
+	},
+	metaLabel: {
+		...typography.caption,
+		color: colors.text.muted,
+	},
+	metaValue: {
+		...typography.caption,
+		color: colors.text.secondary,
+		flexShrink: 1,
+		textAlign: "right",
+	},
+	deletedBanner: {
+		flexDirection: "row",
+		alignItems: "center",
+		gap: spacing.sm,
+		padding: spacing.md,
+		borderRadius: radius.md,
+		backgroundColor: colors.semantic.warningBg,
+		marginBottom: spacing.base,
+	},
+	deletedBannerText: {
+		...typography.body,
+		color: "#7A5A00",
+		flex: 1,
+	},
+	errorBanner: {
+		flexDirection: "row",
+		alignItems: "center",
+		gap: spacing.sm,
+		padding: spacing.md,
+		borderRadius: radius.md,
+		backgroundColor: colors.semantic.dangerBg,
+		marginBottom: spacing.base,
+	},
+	errorText: {
+		...typography.body,
+		color: colors.semantic.danger,
+		flex: 1,
+	},
+	deleteRow: {
+		alignItems: "center",
+		marginTop: spacing.md,
+	},
+	notFound: {
 		flex: 1,
 		alignItems: "center",
 		justifyContent: "center",
-		padding: 20,
+		paddingHorizontal: spacing.xl,
+		gap: spacing.sm,
 	},
-	loadingText: {
-		marginTop: 10,
-		color: "#666",
+	notFoundTitle: {
+		...typography.h2,
+		color: colors.text.primary,
 	},
-	header: {
-		marginBottom: 16,
-	},
-	pageTitle: {
-		fontSize: 28,
-		fontWeight: "700",
-		color: "#111",
-	},
-	pageSubtitle: {
-		marginTop: 6,
-		color: "#666",
-	},
-	errorText: {
-		color: "crimson",
-		marginBottom: 12,
-		fontWeight: "600",
-	},
-	errorTitle: {
-		fontSize: 22,
-		fontWeight: "700",
-		marginBottom: 8,
-		color: "#111",
-	},
-	deletedBanner: {
-		backgroundColor: "#fff3cd",
-		borderWidth: 1,
-		borderColor: "#ffe08a",
-		padding: 12,
-		borderRadius: 12,
-		marginBottom: 16,
-	},
-	deletedBannerText: {
-		color: "#7a5a00",
-		fontWeight: "600",
-	},
-	primaryButton: {
-		marginTop: 16,
-		backgroundColor: "#111",
-		paddingVertical: 14,
-		borderRadius: 12,
-		alignItems: "center",
-	},
-	primaryButtonText: {
-		color: "#fff",
-		fontWeight: "700",
-		fontSize: 15,
-	},
-	deleteButton: {
-		marginTop: 12,
-		backgroundColor: "#fff5f5",
-		borderWidth: 1,
-		borderColor: "#ffd6d6",
-		paddingVertical: 14,
-		borderRadius: 12,
-		alignItems: "center",
-	},
-	deleteButtonText: {
-		color: "#b00020",
-		fontWeight: "700",
-		fontSize: 15,
-	},
-	restoreButton: {
-		marginTop: 16,
-		backgroundColor: "#111",
-		paddingVertical: 14,
-		borderRadius: 12,
-		alignItems: "center",
-	},
-	restoreButtonText: {
-		color: "#fff",
-		fontWeight: "700",
-		fontSize: 15,
-	},
-	secondaryButton: {
-		marginTop: 12,
-		paddingVertical: 14,
-		borderRadius: 12,
-		alignItems: "center",
-		borderWidth: 1,
-		borderColor: "#ddd",
-	},
-	secondaryButtonText: {
-		color: "#111",
-		fontWeight: "700",
-		fontSize: 15,
-	},
-	backButton: {
-		marginTop: 12,
-		paddingVertical: 12,
-		paddingHorizontal: 18,
-		borderRadius: 12,
-		backgroundColor: "#111",
-	},
-	backButtonText: {
-		color: "#fff",
-		fontWeight: "700",
-	},
-	buttonDisabled: {
-		opacity: 0.6,
+	notFoundText: {
+		...typography.body,
+		color: colors.text.secondary,
+		textAlign: "center",
 	},
 });

@@ -1,131 +1,198 @@
-import { Link, useRouter } from "expo-router";
+// Login screen — centered column on calm off-white background.
+// Brand mark, display title, subtitle, two InputFields, PrimaryButton,
+// TextButton to signup.
+
+import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
-	Alert,
+	KeyboardAvoidingView,
+	Platform,
+	ScrollView,
 	StyleSheet,
 	Text,
-	TextInput,
-	TouchableOpacity,
 	View,
 } from "react-native";
+import InputField from "../../src/components/ui/InputField";
+import PrimaryButton from "../../src/components/ui/PrimaryButton";
+import ScreenContainer from "../../src/components/ui/ScreenContainer";
+import TextButton from "../../src/components/ui/TextButton";
+import { useToast } from "../../src/hooks/useToast";
 import { AuthService } from "../../src/services/auth.service";
+import { colors, radius, spacing, typography } from "../../src/theme";
 
 export default function LoginScreen() {
 	const router = useRouter();
+	const { show } = useToast();
 
-	const [email, setEmail] = useState("theamanmalikarts@gmail.com");
-	const [password, setPassword] = useState("9034804094");
+	const [email, setEmail] = useState("");
+	const [password, setPassword] = useState("");
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState("");
+
+	const canSubmit = email.trim().length > 0 && password.length > 0 && !loading;
 
 	const handleLogin = async () => {
 		setError("");
 
 		if (!email.trim() || !password) {
-			setError("Email and password are required.");
+			setError("Enter your email and password to continue.");
 			return;
 		}
 
-		try {
-			setLoading(true);
+		setLoading(true);
+		const result = await AuthService.signIn(email.trim(), password);
+		setLoading(false);
 
-			const result = await AuthService.signIn(email.trim(), password);
-
-			if (!result.success) {
-				setError(result.message || "Login failed.");
-				return;
-			}
-
-			Alert.alert("Success", "Logged in successfully.");
-			router.replace("/(app)/(tabs)");
-		} catch (err) {
-			setError(err?.message || "Something went wrong.");
-		} finally {
-			setLoading(false);
+		if (!result.success) {
+			setError(result.message || "Sign in failed. Please try again.");
+			return;
 		}
+
+		show({ message: "Welcome back", tone: "success" });
+		router.replace("/(app)/(tabs)");
 	};
 
 	return (
-		<View style={styles.container}>
-			<Text style={styles.title}>Login</Text>
-
-			{error ? <Text style={styles.error}>{error}</Text> : null}
-
-			<TextInput
-				style={styles.input}
-				placeholder="Email"
-				autoCapitalize="none"
-				keyboardType="email-address"
-				value={email}
-				onChangeText={setEmail}
-			/>
-
-			<TextInput
-				style={styles.input}
-				placeholder="Password"
-				secureTextEntry
-				value={password}
-				onChangeText={setPassword}
-			/>
-
-			<TouchableOpacity
-				style={[styles.button, loading && styles.buttonDisabled]}
-				onPress={handleLogin}
-				disabled={loading}
+		<ScreenContainer background="background" padded>
+			<KeyboardAvoidingView
+				behavior={Platform.OS === "ios" ? "padding" : undefined}
+				style={styles.flex}
 			>
-				<Text style={styles.buttonText}>
-					{loading ? "Logging in..." : "Login"}
-				</Text>
-			</TouchableOpacity>
+				<ScrollView
+					contentContainerStyle={styles.content}
+					keyboardShouldPersistTaps="handled"
+					keyboardDismissMode="on-drag"
+					showsVerticalScrollIndicator={false}
+				>
+					<View style={styles.brandMark}>
+						<Ionicons
+							name="checkmark-circle"
+							size={28}
+							color={colors.text.inverse}
+						/>
+					</View>
 
-			<Link href="/(auth)/signup" style={styles.link}>
-				Create an account
-			</Link>
-		</View>
+					<Text style={styles.title}>Welcome back</Text>
+					<Text style={styles.subtitle}>
+						Sign in to keep your tasks in sync.
+					</Text>
+
+					<View style={styles.form}>
+						{error ? (
+							<View style={styles.errorBanner}>
+								<Ionicons
+									name="alert-circle-outline"
+									size={18}
+									color={colors.semantic.danger}
+								/>
+								<Text style={styles.errorText}>{error}</Text>
+							</View>
+						) : null}
+
+						<InputField
+							label="Email"
+							value={email}
+							onChangeText={setEmail}
+							placeholder="you@example.com"
+							keyboardType="email-address"
+							autoCapitalize="none"
+							autoComplete="email"
+							leftIcon={
+								<Ionicons
+									name="mail-outline"
+									size={18}
+									color={colors.text.secondary}
+								/>
+							}
+						/>
+
+						<InputField
+							label="Password"
+							value={password}
+							onChangeText={setPassword}
+							placeholder="Your password"
+							secureTextEntry
+							autoComplete="password"
+							leftIcon={
+								<Ionicons
+									name="lock-closed-outline"
+									size={18}
+									color={colors.text.secondary}
+								/>
+							}
+						/>
+
+						<PrimaryButton
+							label={loading ? "Signing in..." : "Sign in"}
+							onPress={handleLogin}
+							disabled={!canSubmit}
+							loading={loading}
+							size="lg"
+							fullWidth
+						/>
+
+						<View style={styles.linkRow}>
+							<TextButton
+								label="Create an account"
+								tone="brand"
+								onPress={() => router.push("/(auth)/signup")}
+							/>
+						</View>
+					</View>
+				</ScrollView>
+			</KeyboardAvoidingView>
+		</ScreenContainer>
 	);
 }
 
 const styles = StyleSheet.create({
-	container: {
+	flex: {
 		flex: 1,
+	},
+	content: {
+		flexGrow: 1,
 		justifyContent: "center",
-		padding: 24,
-		backgroundColor: "#fff",
+		paddingVertical: spacing["3xl"],
+	},
+	brandMark: {
+		width: 48,
+		height: 48,
+		borderRadius: radius.md,
+		backgroundColor: colors.brand.primary,
+		alignItems: "center",
+		justifyContent: "center",
+		marginBottom: spacing.xl,
 	},
 	title: {
-		fontSize: 32,
-		fontWeight: "700",
-		marginBottom: 20,
-		color: "#111",
+		...typography.display,
+		color: colors.text.primary,
 	},
-	error: {
-		color: "crimson",
-		marginBottom: 12,
+	subtitle: {
+		...typography.bodyLg,
+		color: colors.text.secondary,
+		marginTop: spacing.sm,
+		marginBottom: spacing["2xl"],
 	},
-	input: {
-		borderWidth: 1,
-		borderColor: "#ddd",
-		borderRadius: 12,
-		padding: 14,
-		marginBottom: 14,
-		backgroundColor: "#fafafa",
+	form: {
+		gap: spacing.base,
 	},
-	button: {
-		backgroundColor: "#111",
-		padding: 14,
-		borderRadius: 12,
+	errorBanner: {
+		flexDirection: "row",
 		alignItems: "center",
-		marginBottom: 14,
+		gap: spacing.sm,
+		padding: spacing.md,
+		borderRadius: radius.md,
+		backgroundColor: colors.semantic.dangerBg,
+		marginBottom: spacing.sm,
 	},
-	buttonDisabled: {
-		opacity: 0.7,
+	errorText: {
+		...typography.body,
+		color: colors.semantic.danger,
+		flex: 1,
 	},
-	buttonText: {
-		color: "#fff",
-		fontWeight: "700",
-	},
-	link: {
-		color: "#111",
-		fontWeight: "600",
+	linkRow: {
+		alignItems: "center",
+		marginTop: spacing.base,
 	},
 });

@@ -22,7 +22,7 @@ export async function patchMyProfile(userId, payload) {
 			timezone: payload.timezone,
 			locale: payload.locale,
 			onboarding_completed: payload.onboarding_completed,
-			avatart_url: payload.avatart_url,
+			avatar_url: payload.avatar_url,
 			updated_at: new Date().toISOString(),
 		})
 		.eq("id", userId)
