@@ -13,8 +13,8 @@ import { AuthService } from "../../src/services/auth.service";
 export default function LoginScreen() {
 	const router = useRouter();
 
-	const [email, setEmail] = useState("");
-	const [password, setPassword] = useState("");
+	const [email, setEmail] = useState("theamanmalikarts@gmail.com");
+	const [password, setPassword] = useState("9034804094");
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState("");
 

@@ -22,10 +22,13 @@ export async function listUserTasks(req, res, next) {
 	try {
 		const status = req.query.status ?? null;
 		const includeDeleted = req.query.include_deleted === "true";
+		// ISO timestamp; when present, only tasks updated after this point are returned.
+		const updatedAfter = req.query.updated_after ?? null;
 
 		const tasks = await listTasks(req.user.id, {
 			status,
 			includeDeleted,
+			updatedAfter,
 		});
 
 		res.json({

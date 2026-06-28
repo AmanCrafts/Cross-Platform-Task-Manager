@@ -59,6 +59,7 @@ export default function HomeScreen() {
 	};
 
 	const handleToggleComplete = async (task) => {
+		console.log("Toggling task completion:", task.id);
 		const nextStatus = task.status === "done" ? "todo" : "done";
 
 		const result = await TaskService.update(task.id, {
@@ -75,6 +76,7 @@ export default function HomeScreen() {
 	};
 
 	const handleDelete = async (task) => {
+		console.log("Deleting task:", task.id);
 		Alert.alert("Delete task", "Are you sure you want to delete this task?", [
 			{ text: "Cancel", style: "cancel" },
 			{

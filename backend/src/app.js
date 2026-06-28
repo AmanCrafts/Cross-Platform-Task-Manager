@@ -2,11 +2,9 @@ import cors from "cors";
 import express from "express";
 import helmet from "helmet";
 import morgan from "morgan";
-
+import errorHandler from "./middlewares/error.middleware.js";
 import profileRoutes from "./routes/profile.routes.js";
 import taskRoutes from "./routes/task.routes.js";
-
-import errorHandler from "./middlewares/error.middleware.js";
 
 const app = express();
 

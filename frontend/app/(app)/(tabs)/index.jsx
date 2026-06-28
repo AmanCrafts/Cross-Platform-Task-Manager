@@ -12,29 +12,38 @@ import {
 } from "react-native";
 import Screen from "../../../src/components/Screen";
 import TaskCard from "../../../src/components/TaskCard";
+import { useAuth } from "../../../src/hooks/useAuth";
 import { TaskService } from "../../../src/services/task.service";
 
 export default function HomeScreen() {
 	const router = useRouter();
+	const { refreshSync } = useAuth();
 
 	const [tasks, setTasks] = useState([]);
 	const [loading, setLoading] = useState(true);
 	const [refreshing, setRefreshing] = useState(false);
 	const [error, setError] = useState("");
 
-	const loadTasks = useCallback(async () => {
-		setError("");
+	const loadTasks = useCallback(
+		async ({ syncFirst = false } = {}) => {
+			setError("");
 
-		const result = await TaskService.getAll();
+			if (syncFirst) {
+				await refreshSync();
+			}
 
-		if (!result.success) {
-			setError(result.message || "Failed to load tasks.");
-			setTasks([]);
-			return;
-		}
+			const result = await TaskService.getAll();
 
-		setTasks(Array.isArray(result.data) ? result.data : []);
-	}, []);
+			if (!result.success) {
+				setError(result.message || "Failed to load tasks.");
+				setTasks([]);
+				return;
+			}
+
+			setTasks(Array.isArray(result.data) ? result.data : []);
+		},
+		[refreshSync],
+	);
 
 	useFocusEffect(
 		useCallback(() => {
@@ -43,7 +52,7 @@ export default function HomeScreen() {
 			(async () => {
 				if (!mounted) return;
 				setLoading(true);
-				await loadTasks();
+				await loadTasks({ syncFirst: true });
 				if (mounted) setLoading(false);
 			})();
 
@@ -55,7 +64,7 @@ export default function HomeScreen() {
 
 	const handleRefresh = async () => {
 		setRefreshing(true);
-		await loadTasks();
+		await loadTasks({ syncFirst: true });
 		setRefreshing(false);
 	};
 
@@ -73,6 +82,27 @@ export default function HomeScreen() {
 		}
 
 		await loadTasks();
+	};
+
+	const handleDelete = async (task) => {
+		console.log("Deleting task:", task.id);
+		Alert.alert("Delete task", "Are you sure you want to delete this task?", [
+			{ text: "Cancel", style: "cancel" },
+			{
+				text: "Delete",
+				style: "destructive",
+				onPress: async () => {
+					const result = await TaskService.remove(task.id);
+
+					if (!result.success) {
+						Alert.alert("Error", result.message);
+						return;
+					}
+
+					await loadTasks();
+				},
+			},
+		]);
 	};
 
 	if (loading) {
@@ -106,6 +136,7 @@ export default function HomeScreen() {
 							task={item}
 							onPress={() => router.push(`/(app)/tasks/${item.id}`)}
 							onToggleComplete={() => handleToggleComplete(item)}
+							onDelete={() => handleDelete(item)}
 						/>
 					)}
 					contentContainerStyle={

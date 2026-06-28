@@ -172,9 +172,10 @@ export default function TaskDetailsScreen() {
 								return;
 							}
 
-							setTask(result.data);
-							setForm(toForm(result.data));
-							Alert.alert("Deleted", "Task deleted successfully.");
+							// Task is permanently deleted — go back to the list.
+							Alert.alert("Deleted", "Task deleted successfully.", [
+								{ text: "OK", onPress: () => router.back() },
+							]);
 						} catch (err) {
 							setError(err?.message || "Something went wrong.");
 						} finally {

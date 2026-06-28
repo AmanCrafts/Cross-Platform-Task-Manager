@@ -11,3 +11,5 @@ export function getApiError(error) {
 		status: error.response.status,
 	};
 }
+
+export const getApiErrorMessage = getApiError;

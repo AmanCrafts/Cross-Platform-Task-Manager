@@ -53,7 +53,10 @@ function TaskCard({ task, onPress, onToggleComplete, onDelete }) {
 				<Text style={styles.metaText}>{task.status}</Text>
 			</View>
 
-			<View style={styles.actionsRow}>
+			{/* Stop touch events from bubbling to the outer card TouchableOpacity.
+			    Without this, tapping Delete also fires onPress (navigation),
+			    which dismisses the Alert before the user can confirm. */}
+			<View style={styles.actionsRow} onStartShouldSetResponder={() => true}>
 				<TouchableOpacity
 					style={[styles.actionButton, completed && styles.actionButtonActive]}
 					onPress={onToggleComplete}

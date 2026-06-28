@@ -2,7 +2,11 @@ import { db } from "../config/db.js";
 import { createSyncLog } from "./sync-log.service.js";
 
 function buildTaskQuery(userId, options = {}) {
-	const { includeDeleted = false, status = null } = options;
+	const {
+		includeDeleted = false,
+		status = null,
+		updatedAfter = null,
+	} = options;
 
 	let query = db
 		.from("tasks")
@@ -17,6 +21,12 @@ function buildTaskQuery(userId, options = {}) {
 
 	if (status) {
 		query = query.eq("status", status);
+	}
+
+	// Incremental pull support: filter to tasks modified after the given timestamp.
+	// When null, a full pull is performed (e.g. first sync after login).
+	if (updatedAfter) {
+		query = query.gte("updated_at", updatedAfter);
 	}
 
 	return query;
@@ -58,6 +68,10 @@ export async function createTask(userId, payload, meta = {}) {
 	}
 
 	const taskPayload = {
+		// Honour the client-generated UUID so the same ID is used in both
+		// the local SQLite store and Supabase. Without this the DB generates
+		// a new UUID on every insert, producing duplicates after pull-sync.
+		...(payload.id ? { id: payload.id } : {}),
 		user_id: userId,
 		title: payload.title.trim(),
 		description: payload.description ?? null,
@@ -198,11 +212,10 @@ export async function deleteTask(userId, taskId, meta = {}) {
 		.from("tasks")
 		.update({
 			deleted_at: now,
-			archived_at: existingTask.archived_at ?? null,
+			updated_at: now,
 			sync_version: (existingTask.sync_version ?? 1) + 1,
 			last_synced_at: meta.lastSyncedAt ?? existingTask.last_synced_at,
 			last_modified_by: userId,
-			updated_at: now,
 		})
 		.eq("id", taskId)
 		.eq("user_id", userId)

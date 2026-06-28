@@ -12,7 +12,9 @@ import {
 } from "react-native";
 import Screen from "../../../src/components/Screen";
 import { useAuth } from "../../../src/hooks/useAuth";
+import { AuthService } from "../../../src/services/auth.service";
 import { ProfileService } from "../../../src/services/profile.service";
+import { TaskService } from "../../../src/services/task.service";
 
 const INITIAL_FORM = {
 	username: "",
@@ -196,6 +198,16 @@ export default function ProfileScreen() {
 					onPress={() => router.replace("/(app)/(tabs)")}
 				>
 					<Text style={styles.secondaryButtonText}>Back Home</Text>
+				</TouchableOpacity>
+				<TouchableOpacity
+					style={styles.secondaryButton}
+					onPress={async () => {
+						await TaskService.clearLocalCache();
+						await AuthService.signOut();
+						router.replace("/(auth)/login");
+					}}
+				>
+					<Text style={styles.secondaryButtonText}>Logout</Text>
 				</TouchableOpacity>
 			</ScrollView>
 		</Screen>
