@@ -55,7 +55,7 @@ export function AuthProvider({ children }) {
 	const [lastSyncedAt, setLastSyncedAt] = useState(null);
 
 	const [profile, setProfile] = useState(null);
-	const [profileLoading, setProfileLoading] = useState(false);
+	const [profileLoading, setProfileLoading] = useState(true);
 
 	const monitorStopRef = useRef(null);
 	const mountedRef = useRef(true);
@@ -269,9 +269,17 @@ export function AuthProvider({ children }) {
 			profile,
 			profileLoading,
 			refreshProfile,
+			// True only when we have a session AND the profile has resolved
+			// AND the server says onboarding hasn't been completed. While
+			// profileLoading is true (initial fetch in flight) we must
+			// return false — otherwise routing will bounce to the Profile
+			// screen on every cold start before the profile arrives.
 			needsOnboarding:
-				!!session &&
-				(profile === null || profile?.onboarding_completed === false),
+				!!session && !profileLoading && profile?.onboarding_completed === false,
+			// True until both auth AND profile are fully resolved for the
+			// current session. Use this in route guards to prevent
+			// flicker / incorrect redirects during cold start.
+			initializing: loading || (!!session && profileLoading),
 		}),
 		[
 			session,

@@ -2,10 +2,14 @@ import { Redirect, Stack } from "expo-router";
 import { ActivityIndicator, View } from "react-native";
 import { useAuth } from "../../src/hooks/useAuth";
 
+// Auth-group layout. Waits for both auth and profile to resolve before
+// deciding whether to keep the user on login or bounce them into the app.
+// This prevents flicker on cold start and the wrong-screen-on-first-render
+// bug.
 export default function AuthLayout() {
-	const { session, loading, needsOnboarding } = useAuth();
+	const { session, initializing, needsOnboarding } = useAuth();
 
-	if (loading) {
+	if (initializing) {
 		return (
 			<View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
 				<ActivityIndicator />

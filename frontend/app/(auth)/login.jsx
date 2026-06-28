@@ -25,8 +25,8 @@ export default function LoginScreen() {
 	const router = useRouter();
 	const { show } = useToast();
 
-	const [email, setEmail] = useState("");
-	const [password, setPassword] = useState("");
+	const [email, setEmail] = useState("demo@gmail.com");
+	const [password, setPassword] = useState("9034804094");
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState("");
 
@@ -49,7 +49,7 @@ export default function LoginScreen() {
 			return;
 		}
 
-		show({ message: "Welcome back", tone: "success" });
+		show({ message: "DEMO LOGIN", tone: "success" });
 		router.replace("/(app)/(tabs)");
 	};
 
@@ -65,18 +65,26 @@ export default function LoginScreen() {
 					keyboardDismissMode="on-drag"
 					showsVerticalScrollIndicator={false}
 				>
-					<View style={styles.brandMark}>
-						<Ionicons
-							name="checkmark-circle"
-							size={28}
-							color={colors.text.inverse}
-						/>
-					</View>
+					<View
+						style={{
+							justifyContent: "center",
+							flexDirection: "column",
+							alignItems: "center",
+						}}
+					>
+						<View style={styles.brandMark}>
+							<Ionicons
+								name="checkmark-circle"
+								size={28}
+								color={colors.text.inverse}
+							/>
+						</View>
 
-					<Text style={styles.title}>Welcome back</Text>
-					<Text style={styles.subtitle}>
-						Sign in to keep your tasks in sync.
-					</Text>
+						<Text style={styles.title}>Demo Sign In</Text>
+						<Text style={styles.subtitle}>
+							Sign in directly to test the application.
+						</Text>
+					</View>
 
 					<View style={styles.form}>
 						{error ? (
