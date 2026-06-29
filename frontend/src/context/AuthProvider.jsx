@@ -9,6 +9,7 @@ import {
 	useRef,
 	useState,
 } from "react";
+import { Platform } from "react-native";
 import {
 	isNetworkOnline,
 	startNetworkMonitor,
@@ -19,8 +20,26 @@ import { ProfileService } from "../services/profile.service";
 
 const AuthContext = createContext(null);
 const DEVICE_ID_KEY = "taskflow_device_id";
+const isWeb = Platform.OS === "web";
 
 async function getOrCreateDeviceId() {
+	// SecureStore is native-only; on web we keep device id in localStorage
+	// so the offline sync layer still has a stable per-browser id.
+	if (isWeb) {
+		try {
+			const existing = globalThis.localStorage?.getItem(DEVICE_ID_KEY);
+			if (existing) return existing;
+
+			const nextId = `device_${Date.now()}_${Math.random()
+				.toString(36)
+				.slice(2, 10)}`;
+			globalThis.localStorage?.setItem(DEVICE_ID_KEY, nextId);
+			return nextId;
+		} catch {
+			return null;
+		}
+	}
+
 	const existing = await SecureStore.getItemAsync(DEVICE_ID_KEY);
 
 	if (existing) {
