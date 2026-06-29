@@ -134,6 +134,13 @@ export function AuthProvider({ children }) {
 			};
 		}
 
+		// No offline queue to drain on web — operations hit the backend
+		// directly through TaskRemoteService.
+		if (isWeb) {
+			setLastSyncedAt(new Date().toISOString());
+			return { success: true, message: "Web is always online." };
+		}
+
 		try {
 			setSyncing(true);
 			setSyncError("");
@@ -196,6 +203,15 @@ export function AuthProvider({ children }) {
 		let cancelled = false;
 
 		async function bootstrapOffline() {
+			// On web, the offline SQLite cache is unavailable. The remote
+			// service is the only path on web, so there's nothing to sync
+			// or queue locally.
+			if (isWeb) {
+				setDeviceId(null);
+				setSyncing(false);
+				return;
+			}
+
 			stopMonitor(monitorStopRef);
 			setSyncError("");
 			setLastSyncedAt(null);

@@ -1,4 +1,5 @@
 import * as Crypto from "expo-crypto";
+import { Platform } from "react-native";
 import { supabase } from "../lib/supabase";
 import { truncateLocalDb } from "../offline/db";
 import { isOnline } from "../offline/network.monitor";
@@ -13,6 +14,7 @@ import {
 	updateTask as updateLocalTask,
 	upsertTask,
 } from "../offline/task.repository";
+import { TaskRemoteService } from "./task.remote.service";
 
 function nowIso() {
 	return new Date().toISOString();
@@ -152,7 +154,7 @@ async function syncIfOnline(userId) {
 	});
 }
 
-export const TaskService = {
+export const _nativeTaskService = {
 	async getAll({ status = null, includeDeleted = false } = {}) {
 		return withUser(async (userId) => {
 			const data = await getAllTasks({
@@ -389,3 +391,27 @@ export const TaskService = {
 		});
 	},
 };
+
+// On web, the offline SQLite cache is unavailable (expo-sqlite has no
+// working web implementation in SDK 56). The remote service talks
+// directly to the backend, which is what we want on web anyway.
+function buildWebTaskService() {
+	return {
+		getAll: (opts) => TaskRemoteService.getAll(opts),
+		getById: (id) => TaskRemoteService.getById(id),
+		create: (payload) => TaskRemoteService.create(payload),
+		update: (id, payload) => TaskRemoteService.update(id, payload),
+		remove: (id) => TaskRemoteService.remove(id),
+		restore: (id) => TaskRemoteService.restore(id),
+		sync: () =>
+			Promise.resolve({ success: true, message: "Web is always online." }),
+		clearLocalCache: () =>
+			Promise.resolve({
+				success: true,
+				message: "No local cache on web.",
+			}),
+	};
+}
+
+export const TaskService =
+	Platform.OS === "web" ? buildWebTaskService() : _nativeTaskService;

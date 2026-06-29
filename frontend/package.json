@@ -42,7 +42,7 @@
 		"build:android:dev": "eas build --platform android --profile development --non-interactive",
 		"build:web": "expo export --platform web --output-dir dist",
 		"build:web:clean": "expo export --platform web --output-dir dist --clear",
-		"preview:web": "npx --yes serve dist -l 3000",
+		"preview:web": "npx --yes serve dist -l 5173",
 		"deploy:web:preview": "npm run build:web && npx --yes netlify deploy --dir=dist --prod=false",
 		"deploy:web:production": "npm run build:web && npx --yes netlify deploy --dir=dist --prod",
 		"format": "biome format",
