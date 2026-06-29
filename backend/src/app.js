@@ -8,7 +8,20 @@ import taskRoutes from "./routes/task.routes.js";
 
 const app = express();
 
-app.use(cors());
+app.use(
+	cors({
+		origin: "*",
+		methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+		allowedHeaders: [
+			"Content-Type",
+			"Authorization",
+			"Accept",
+			"X-Requested-With",
+		],
+		exposedHeaders: ["Content-Length"],
+		maxAge: 86400,
+	}),
+);
 app.use(helmet());
 app.use(morgan("dev"));
 app.use(express.json());

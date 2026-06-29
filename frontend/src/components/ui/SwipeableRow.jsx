@@ -132,8 +132,17 @@ export default function SwipeableRow({
 
 				translateX.value = withSpring(0, SPRING);
 			});
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [canSwipe, hasLeft, hasRight, fireLeft, fireRight]);
+	}, [
+		canSwipe,
+		hasLeft,
+		hasRight,
+		fireLeft,
+		fireRight,
+		opacity,
+		startX,
+		translateX,
+		scale,
+	]);
 
 	const cardStyle = useAnimatedStyle(() => ({
 		transform: [{ translateX: translateX.value }, { scale: scale.value }],

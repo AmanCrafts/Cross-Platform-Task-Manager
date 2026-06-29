@@ -3,7 +3,7 @@
 // imitating it. Used while data is being fetched for the first time
 // after auth or app foregrounding.
 
-import { useEffect } from "react";
+import { useEffect, useId, useMemo } from "react";
 import { StyleSheet, View } from "react-native";
 import Animated, {
 	Easing,
@@ -18,6 +18,7 @@ const ROW_COUNT = 5;
 
 export default function TaskListSkeleton() {
 	const shimmer = useSharedValue(0);
+	const instanceId = useId();
 
 	useEffect(() => {
 		shimmer.value = withRepeat(
@@ -30,10 +31,19 @@ export default function TaskListSkeleton() {
 		);
 	}, [shimmer]);
 
+	const rows = useMemo(
+		() =>
+			Array.from({ length: ROW_COUNT }, (_, position) => ({
+				key: `${instanceId}-row-${position}`,
+				delay: position * 80,
+			})),
+		[instanceId],
+	);
+
 	return (
 		<View style={styles.container}>
-			{Array.from({ length: ROW_COUNT }).map((_, index) => (
-				<SkeletonRow key={index} shimmer={shimmer} delay={index * 80} />
+			{rows.map((row) => (
+				<SkeletonRow key={row.key} shimmer={shimmer} delay={row.delay} />
 			))}
 		</View>
 	);

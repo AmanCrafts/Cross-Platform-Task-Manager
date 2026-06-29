@@ -1,25 +1,48 @@
 {
 	"expo": {
-		"name": "frontend",
-		"slug": "frontend",
+		"name": "TaskFlow",
+		"slug": "taskflow",
 		"version": "1.0.0",
 		"orientation": "portrait",
 		"icon": "./assets/icon.png",
 		"userInterfaceStyle": "light",
+		"scheme": "taskflow",
 		"ios": {
-			"supportsTablet": true
+			"supportsTablet": true,
+			"bundleIdentifier": "com.taskflow.app"
 		},
 		"android": {
+			"package": "com.taskflow.app",
+			"versionCode": 1,
 			"adaptiveIcon": {
 				"backgroundColor": "#E6F4FE",
 				"foregroundImage": "./assets/android-icon-foreground.png",
 				"backgroundImage": "./assets/android-icon-background.png",
 				"monochromeImage": "./assets/android-icon-monochrome.png"
-			}
+			},
+			"permissions": [
+				"android.permission.INTERNET",
+				"android.permission.ACCESS_NETWORK_STATE"
+			]
 		},
 		"web": {
 			"favicon": "./assets/favicon.png"
 		},
-		"plugins": ["expo-secure-store", "expo-router", "expo-status-bar"]
+		"plugins": [
+			"expo-secure-store",
+			"expo-router",
+			"expo-status-bar",
+			"expo-font"
+		],
+		"runtimeVersion": {
+			"policy": "appVersion"
+		},
+		"extra": {
+			"router": {},
+			"eas": {
+				"projectId": "5799444d-7b4a-4054-8258-3a161c0c0c23"
+			}
+		},
+		"owner": "amancrafts"
 	}
 }
